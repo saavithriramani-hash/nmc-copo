@@ -229,7 +229,20 @@ export function StructureEditor({ assessmentId, shape, canEdit, cos, weightGroup
                 />
                 <button type="button" onClick={() => moveSection(index, -1)} disabled={index === 0} className="px-1 disabled:opacity-30">↑</button>
                 <button type="button" onClick={() => moveSection(index, 1)} disabled={index === sections.length - 1} className="px-1 disabled:opacity-30">↓</button>
-                <span className="text-xs text-gray-500">{section.items.length} item{section.items.length === 1 ? '' : 's'}</span>
+                <label className="flex items-center gap-1 text-xs text-gray-700">
+                  answer any
+                  <input
+                    type="number"
+                    min={1}
+                    max={section.items.length}
+                    value={section.optionalAnswerCount ?? ''}
+                    onChange={(e) => updateSection(index, { optionalAnswerCount: e.target.value === '' ? null : Number(e.target.value) })}
+                    placeholder="all"
+                    className="border border-gray-300 rounded px-1 py-0.5 w-14 text-center"
+                    aria-label="answer any n questions"
+                  />
+                  of {section.items.length}
+                </label>
                 <button
                   type="button"
                   onClick={() => { setSections((current) => current.filter((_, i) => i !== index)); touch(); }}
@@ -257,7 +270,7 @@ export function StructureEditor({ assessmentId, shape, canEdit, cos, weightGroup
           ))}
           <button
             type="button"
-            onClick={() => { setSections((current) => [...current, { id: null, name: `Section ${String.fromCharCode(65 + current.length)}`, items: [] }]); touch(); }}
+            onClick={() => { setSections((current) => [...current, { id: null, name: `Section ${String.fromCharCode(65 + current.length)}`, optionalAnswerCount: null, items: [] }]); touch(); }}
             className="border border-gray-300 rounded px-2 py-1 hover:bg-gray-100"
           >
             + section

@@ -351,6 +351,12 @@ model Section {
   assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Restrict)
   name         String
   displayOrder Int
+  /// §3.1 "answer any n of m": the number of the section's questions a
+  /// student may answer. null = all compulsory. m is the item count.
+  /// Advisory only — the engine excludes blanks per item regardless; the
+  /// pre-calculation anomaly report (FR-13) flags a student who answered
+  /// more than this many.
+  optionalAnswerCount Int?
 
   items Item[]
 
@@ -484,6 +490,7 @@ model User {
   snapshots   AttainmentSnapshot[]
   auditEvents AuditLog[]
   sessions    Session[]
+  jobs        Job[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -525,6 +532,38 @@ model Role {
   effectiveTo   DateTime? // null = current
 
   @@index([userId])
+}
+
+// ─────────────────────────────── jobs ────────────────────────────────
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+/// A background job (NFR-2/NFR-4): programme and institution
+/// consolidations run here with a progress indicator, never as a blocking
+/// request. DB-backed and in-process — no queue service to maintain
+/// (NFR-5). Restartable: a job that died mid-run is simply run again; it
+/// derives everything from marks, storing only its own result row.
+model Job {
+  id           String    @id @default(cuid())
+  kind         String // e.g. "PROGRAMME_CONSOLIDATION", "INSTITUTION_CONSOLIDATION"
+  status       JobStatus @default(PENDING)
+  progress     Int       @default(0) // 0–100
+  progressNote String?
+  payload      Json
+  result       Json?
+  error        String?
+  createdById  String
+  createdBy    User      @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt    DateTime  @default(now())
+  startedAt    DateTime?
+  finishedAt   DateTime?
+
+  @@index([kind, createdAt])
 }
 
 // ──────────────────────────────── audit ────────────────────────────────

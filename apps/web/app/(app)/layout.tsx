@@ -5,11 +5,14 @@ import { requireSession } from '@/lib/session';
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireSession();
 
+  const isIqacOrPrincipal = user.roles.some((role) => role.kind === 'IQAC' || role.kind === 'PRINCIPAL');
   const nav: { href: string; label: string; show: boolean }[] = [
     { href: '/', label: 'Courses', show: true },
     { href: '/programmes', label: 'Programmes', show: true },
+    { href: '/institution', label: 'Institution', show: isIqacOrPrincipal },
     { href: '/templates', label: 'Assessment templates', show: user.hodDepartmentIds.length > 0 },
     { href: '/admin/departments', label: 'Departments', show: user.isAdmin },
+    { href: '/audit', label: 'Audit log', show: user.isAdmin || user.roles.some((role) => role.kind === 'IQAC') },
   ];
 
   return (

@@ -105,6 +105,8 @@ export interface StructureItemInput {
 export interface StructureSectionInput {
   id: string | null;
   name: string;
+  /** §3.1 "answer any n of m"; null = all questions compulsory. */
+  optionalAnswerCount: number | null;
   items: StructureItemInput[];
 }
 export interface StructurePayload {
@@ -160,6 +162,12 @@ export async function saveAssessmentStructureAction(
     if (names.some((name) => !name)) return { error: 'Every section needs a name.' };
     if (new Set(names).size !== names.length) return { error: 'Section names must be unique.' };
     if ((payload.sections ?? []).length === 0) return { error: 'A sectioned assessment needs at least one section.' };
+    for (const section of payload.sections ?? []) {
+      const n = section.optionalAnswerCount;
+      if (n !== null && (!Number.isInteger(n) || n < 1 || n > section.items.length)) {
+        return { error: `Section “${section.name}”: “answer any n” must be between 1 and its ${section.items.length} question(s), or blank for all compulsory.` };
+      }
+    }
   }
   if (assessment.shape === 'SINGLE_SCORE') {
     if (!payload.single || !Number.isFinite(payload.single.maxMark) || payload.single.maxMark <= 0) {
@@ -200,16 +208,16 @@ export async function saveAssessmentStructureAction(
           if (!keptSectionIds.has(existing.id)) await tx.section.delete({ where: { id: existing.id } });
         }
         for (const [sectionIndex, section] of (payload.sections ?? []).entries()) {
+          const sectionData = {
+            name: section.name.trim(),
+            displayOrder: sectionIndex + 1,
+            optionalAnswerCount: section.optionalAnswerCount,
+          };
           let sectionId = section.id;
           if (sectionId) {
-            await tx.section.update({
-              where: { id: sectionId },
-              data: { name: section.name.trim(), displayOrder: sectionIndex + 1 },
-            });
+            await tx.section.update({ where: { id: sectionId }, data: sectionData });
           } else {
-            const created = await tx.section.create({
-              data: { assessmentId, name: section.name.trim(), displayOrder: sectionIndex + 1 },
-            });
+            const created = await tx.section.create({ data: { assessmentId, ...sectionData } });
             sectionId = created.id;
           }
           for (const [itemIndex, item] of section.items.entries()) {

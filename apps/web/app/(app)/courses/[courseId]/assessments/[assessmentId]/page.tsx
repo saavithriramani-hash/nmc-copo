@@ -17,7 +17,10 @@ export default async function AssessmentEditorPage({
   const assessment = await prisma.assessment.findUnique({
     where: { id: assessmentId },
     include: {
-      sections: { orderBy: { displayOrder: 'asc' }, include: { items: { orderBy: { displayOrder: 'asc' } } } },
+      sections: {
+        orderBy: { displayOrder: 'asc' },
+        include: { items: { orderBy: { displayOrder: 'asc' } } },
+      },
       items: { orderBy: { displayOrder: 'asc' } },
       coTags: true,
       _count: { select: { markValues: true } },
@@ -57,6 +60,7 @@ export default async function AssessmentEditorPage({
           sections: assessment.sections.map((section) => ({
             id: section.id,
             name: section.name,
+            optionalAnswerCount: section.optionalAnswerCount,
             items: section.items.map((item) => ({
               id: item.id,
               label: item.label,

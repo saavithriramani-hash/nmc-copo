@@ -113,6 +113,7 @@ function fixtureCourse(overrides: CourseOverrides = {}): CourseForInput {
             assessmentId: 'cia1',
             name: 'Section A',
             displayOrder: 1,
+            optionalAnswerCount: null,
             items: [
               { id: 'q1', assessmentId: 'cia1', sectionId: 'secA', label: 'Q1', maxMark: D('2'), coId: 'co1', displayOrder: 1 },
               { id: 'q2', assessmentId: 'cia1', sectionId: 'secA', label: 'Q2', maxMark: D('5'), coId: null, displayOrder: 2 },
@@ -293,7 +294,7 @@ describe('buildCourseInput — corrupt structure is an AdapterError, never a gue
   it('ITEM_LIST with sections', () => {
     const course = fixtureCourse();
     const quiz = course.assessments.find((a) => a.id === 'quiz1')!;
-    quiz.sections = [{ id: 'sX', assessmentId: 'quiz1', name: 'X', displayOrder: 1, items: [] }];
+    quiz.sections = [{ id: 'sX', assessmentId: 'quiz1', name: 'X', displayOrder: 1, optionalAnswerCount: null, items: [] }];
     expect(() => buildCourseInput(course, MARKS)).toThrow(AdapterError);
   });
 });

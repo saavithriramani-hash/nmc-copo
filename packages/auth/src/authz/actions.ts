@@ -28,7 +28,8 @@ export type ProgrammeActionType =
 export type DepartmentActionType =
   | 'department.read' // department consolidation
   | 'course.create' // create a course in a batch of this department (FR-4)
-  | 'templates.manage'; // department assessment templates (FR-8)
+  | 'templates.manage' // department assessment templates (FR-8)
+  | 'roster.manage'; // import/edit batch rosters of this department (FR-10)
 
 /** Institution-wide actions (no resource id). */
 export type InstitutionActionType =

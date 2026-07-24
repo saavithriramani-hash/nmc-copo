@@ -9,6 +9,13 @@
  * as confirmed by `docs/COPO_App_Requirements_v1.0.md` §5.
  */
 
+/**
+ * Engine version, recorded in every AttainmentSnapshot so an auditor can
+ * replay a locked course against the exact engine that produced it.
+ * Keep in step with package.json.
+ */
+export const ENGINE_VERSION = '0.1.0';
+
 export * from './types';
 export { EngineValidationError, EngineAssertionError, type ValidationIssue } from './errors';
 export { assertPercentInRange } from './assert';

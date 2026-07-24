@@ -33,8 +33,82 @@ course-setup cloning.
 | `…/outcomes` | CO editor (code, statement, Bloom level, reorder) |
 | `…/matrix` | COs down, POs/PSOs across, cells 1/2/3/blank. **Weightages recompute live under each column via the engine's own `step1ArticulationWeightages`** — what faculty see while typing is what the report computes |
 | `…/assessments` | List + add (any shape/rule/group) + **adopt template** + **clone setup** + save-as-template (HoD) |
-| `…/assessments/[id]` | Structure editor: unlimited user-named sections, item tables with per-item CO tags, single-score CO tag checkboxes |
+| `…/assessments/[id]` | Structure editor: unlimited user-named sections (with an "answer any n of m" rule), item tables with per-item CO tags, single-score CO tag checkboxes |
+| `/batches/[id]/roster` | Roster import from Excel/CSV with a full preview; roster list (HoD/admin) |
+| `…/enrolment` | Draw a course's students from the batch roster — tick names, never type register numbers |
+| `…/marks` → `…/marks/[id]` | Assessment picker → the mark entry grid + paste/upload |
+| `…/review` | Pre-calculation anomaly report (FR-13), the six checks |
+| `…/attainment` | Computed attainment, prominent warnings, workflow controls, and the full drill-down |
+| `…/versions` | Immutable snapshot history with what changed between versions |
+| `/programmes/[id]/consolidation` | Programme consolidation as a background job |
+| `/institution` | Institution consolidation (IQAC/Principal) |
+| `/audit` | Audit log (admin/IQAC): who changed what, when, prior value |
 | `/templates` | HoD: department templates with structure summaries |
+
+## Engine wiring, drill-down and approval
+
+- **Course computation is on demand** (`lib/compute.ts`): one course's
+  marks through the adapter into the pure engine. Nothing derived is
+  stored, so every figure always reflects the current marks — except a
+  **LOCKED** course, which renders its immutable snapshot, because that is
+  the record of what was approved.
+- **The drill-down** (`components/DrillDown.tsx`) is a *server* component
+  built on native `<details>`: no JavaScript, keyboard-operable, and the
+  whole chain is on the page. From a PO figure: Step 10 arithmetic → the
+  Step 1 weightage and its CO strengths → each CO's Step 9 blend → the
+  weight groups (Step 5) → the assessments (Step 4, sections included) →
+  each item (Step 3: threshold, attempted, cleared, band) → **the raw
+  marks, student by student**, flagged cleared / attempted-not-cleared /
+  blank-excluded. "Cleared" is decided by the engine's own `ratioGte`, so
+  the list can never disagree with the count it explains.
+- **Warnings are prominent**: a computed-with-warnings course shows a
+  bordered panel listing every code and message, and **cannot be locked**
+  until they are acknowledged. The acknowledgement carries a
+  `warningsFingerprint`; if marks change between review and lock, the
+  server refuses and demands a re-read.
+- **Workflow (FR-16)**: submit → lock → immutable versioned snapshot
+  holding the engine input, the full result, the display maps, the
+  parameters in force and the engine version. Unlocking returns the course
+  to DRAFT and writes nothing over the snapshot (a DB trigger forbids it);
+  re-locking writes version n+1. Every transition is audit-logged with its
+  prior value, and unlocking requires a recorded reason.
+- **Consolidations are background jobs** (`lib/jobs.ts`, `Job` table): the
+  action creates a row and returns a job id immediately; a detached runner
+  updates `progress`/`progressNote` per course while the page polls. One
+  broken course records its error and the run continues. DB-backed and
+  in-process — no queue service for the IT staff to run (NFR-5).
+
+## Roster, enrolment and marks (FR-10 / FR-11 / FR-12 / FR-13)
+
+- **Roster import** (`lib/roster.ts` pure parse/diff; `lib/spreadsheet.ts`
+  exceljs/CSV decode) is two-step: upload → preview exactly what will be
+  created (new vs already-present, per-row errors) → confirm. Register
+  numbers are entered here, once per batch, and never typed into a course.
+- **Enrolment** draws from the roster into `Enrolment` rows; a student
+  with marks cannot be unenrolled (UI-disabled and FK-enforced).
+- **Mark entry grid** (`components/MarkGrid.tsx`) — the screen faculty
+  live in:
+  - students down, items across (sections grouped in the header), sticky
+    row/column headers;
+  - full keyboard nav — arrows (Left/Right cross cells at the input
+    edges), Enter/Down next row, Tab across;
+  - **blank ≠ zero, visibly**: an empty cell is hatched (did not attempt);
+    a real `0` shows plainly. A legend states both;
+  - per-cell validation against the maximum, red-ringed immediately;
+    invalid cells are never saved;
+  - **incremental autosave** (debounced) of only the changed cells via the
+    indexed bulk-upsert (`@copo/db` `bulkUpsertMarks`); every keystroke also
+    writes a `localStorage` draft, so a dropped connection or reload is
+    **restored and re-saved**, losing nothing;
+  - an unambiguous status line: Saved ✓ / Saving… / N unsaved (retrying) /
+    N invalid.
+- **Paste or upload** one assessment's marks (`lib/marks.ts` pure planner),
+  matched on register number, with **every** change previewed (old → new)
+  before a row is written; empty cells import as blank.
+- **Anomaly report** (`lib/anomalies.ts`, aggregated in SQL — NFR-1) runs
+  the six FR-13 checks before compute: marks over maximum, over-attempted
+  optional sections, students with no marks, unattempted items, COs
+  assessed nowhere, feedback below the floor.
 
 ## Templates and cloning (FR-8 / FR-9)
 
@@ -56,8 +130,12 @@ npm run dev -w @copo/web
 #   admin@nmc.dev, hod.math@nmc.dev, faculty1@nmc.dev, faculty2@nmc.dev, coord.math@nmc.dev
 ```
 
-Verified without a database: 8 plan-logic tests, full typecheck, and a
-clean `next build` (all routes compile; auth pages static, everything
-else dynamic). Not yet verified: live browser flows against a running
-Postgres — this machine has no Docker; exercise the seed + login + setup
-flows on a machine that does.
+Verified without a database: 41 web pure-logic tests (setup plans, the
+delimited/roster/mark-import parsers, the anomaly classifiers, the
+consolidation mean and the snapshot diff/fingerprint), full typecheck,
+and a clean `next build` (all 24 routes compile). Not yet verified: live
+browser flows against a running Postgres — this machine has no Docker;
+exercise the seed + login + roster-import + mark-entry + compute + lock
+flows on a machine that does. Mark entry's autosave, the SQL-aggregated
+anomaly queries, and the background job runner are the parts that most
+need a live run.

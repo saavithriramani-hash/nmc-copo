@@ -26,6 +26,7 @@ export default async function HomePage() {
     include: {
       batch: { include: { programme: { include: { department: true } } } },
       instructors: { include: { user: { select: { fullName: true } } } },
+      snapshots: { orderBy: { version: 'desc' }, take: 1, select: { version: true } },
       _count: { select: { cos: true, assessments: true, enrolments: true } },
     },
     orderBy: [{ code: 'asc' }],
@@ -81,7 +82,12 @@ export default async function HomePage() {
                 </td>
                 <td className="border border-gray-300 px-2 py-1 text-center">{course._count.cos}</td>
                 <td className="border border-gray-300 px-2 py-1 text-center">{course._count.assessments}</td>
-                <td className="border border-gray-300 px-2 py-1">{course.status}</td>
+                <td className="border border-gray-300 px-2 py-1 whitespace-nowrap">
+                  {course.status}
+                  {course.snapshots[0] ? (
+                    <span className="text-xs text-gray-500"> · v{course.snapshots[0].version}</span>
+                  ) : null}
+                </td>
               </tr>
             ))}
           </tbody>

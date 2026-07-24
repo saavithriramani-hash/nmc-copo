@@ -194,17 +194,18 @@ describe('policy — system administrator: accounts and infrastructure, never ac
 });
 
 describe('policy — course creation and assessment templates (department chain)', () => {
-  it('the HoD creates courses and manages templates in their department only', () => {
-    expect(decide(hodMath, { type: 'course.create', departmentId: 'dept-math' }, DEPT_MATH).allow).toBe(true);
-    expect(decide(hodMath, { type: 'templates.manage', departmentId: 'dept-math' }, DEPT_MATH).allow).toBe(true);
-    expect(decide(hodMath, { type: 'course.create', departmentId: 'dept-physics' }, DEPT_PHYS).allow).toBe(false);
-    expect(decide(hodMath, { type: 'templates.manage', departmentId: 'dept-physics' }, DEPT_PHYS).allow).toBe(false);
+  it('the HoD creates courses, manages templates and imports rosters in their department only', () => {
+    for (const type of ['course.create', 'templates.manage', 'roster.manage'] as const) {
+      expect(decide(hodMath, { type, departmentId: 'dept-math' }, DEPT_MATH).allow, type).toBe(true);
+      expect(decide(hodMath, { type, departmentId: 'dept-physics' }, DEPT_PHYS).allow, type).toBe(false);
+    }
   });
 
-  it('faculty, coordinator, IQAC and admin do not create courses or manage templates', () => {
+  it('faculty, coordinator, IQAC and admin do not create courses, manage templates or import rosters', () => {
     for (const who of [facultyMath1, coordMath, iqac, admin, principal]) {
-      expect(decide(who, { type: 'course.create', departmentId: 'dept-math' }, DEPT_MATH).allow, who.userId).toBe(false);
-      expect(decide(who, { type: 'templates.manage', departmentId: 'dept-math' }, DEPT_MATH).allow, who.userId).toBe(false);
+      for (const type of ['course.create', 'templates.manage', 'roster.manage'] as const) {
+        expect(decide(who, { type, departmentId: 'dept-math' }, DEPT_MATH).allow, `${who.userId}/${type}`).toBe(false);
+      }
     }
   });
 });

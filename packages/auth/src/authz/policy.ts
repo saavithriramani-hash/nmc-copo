@@ -86,10 +86,11 @@ export function decide(actor: ActorContext, action: Action, resource: ResourceCo
       return deny('OUT_OF_SCOPE');
     }
     case 'course.create':
-    case 'templates.manage': {
-      // Courses are created, and assessment templates defined, by the
-      // department chain (§2 HoD: all faculty capability department-wide;
-      // FR-8: "a department defines reusable patterns").
+    case 'templates.manage':
+    case 'roster.manage': {
+      // Courses are created, assessment templates defined, and batch
+      // rosters imported by the department chain (§2 HoD: all faculty
+      // capability department-wide; FR-8/FR-10).
       if (resource?.kind !== 'department') return deny('RESOURCE_NOT_FOUND');
       if (isHodOf(actor, resource.departmentId)) return allow('HOD');
       return deny('OUT_OF_SCOPE');

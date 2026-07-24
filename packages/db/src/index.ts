@@ -19,3 +19,4 @@ export {
   type MarkRow,
 } from './adapter';
 export { assessmentMarkSummary, type ItemMarkSummary } from './queries';
+export { bulkUpsertMarks, marksForAssessment, type MarkUpsert } from './marks';

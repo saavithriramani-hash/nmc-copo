@@ -31,9 +31,14 @@ export default async function ProgrammePage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-lg font-semibold">{programme.name}</h1>
-        <p className="text-xs text-gray-600">{programme.department.name}</p>
+      <div className="flex items-baseline justify-between">
+        <div>
+          <h1 className="text-lg font-semibold">{programme.name}</h1>
+          <p className="text-xs text-gray-600">{programme.department.name}</p>
+        </div>
+        <Link href={`/programmes/${programme.id}/consolidation`} className="text-sm text-blue-700 hover:underline">
+          Programme consolidation →
+        </Link>
       </div>
       {error ? <p className="text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">{error}</p> : null}
 
@@ -71,7 +76,7 @@ export default async function ProgrammePage({
             <tr className="bg-gray-100 text-left">
               <th className="border border-gray-300 px-2 py-1">Batch</th>
               <th className="border border-gray-300 px-2 py-1">Courses</th>
-              <th className="border border-gray-300 px-2 py-1">Roster size</th>
+              <th className="border border-gray-300 px-2 py-1">Roster</th>
             </tr>
           </thead>
           <tbody>
@@ -79,7 +84,11 @@ export default async function ProgrammePage({
               <tr key={batch.id}>
                 <td className="border border-gray-300 px-2 py-1 font-medium">{batch.name}</td>
                 <td className="border border-gray-300 px-2 py-1 text-center">{batch._count.courses}</td>
-                <td className="border border-gray-300 px-2 py-1 text-center">{batch._count.roster}</td>
+                <td className="border border-gray-300 px-2 py-1 text-center">
+                  <Link href={`/batches/${batch.id}/roster`} className="text-blue-700 hover:underline">
+                    {batch._count.roster} students
+                  </Link>
+                </td>
               </tr>
             ))}
             {programme.batches.length === 0 ? (
