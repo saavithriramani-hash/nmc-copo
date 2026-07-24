@@ -462,9 +462,29 @@ model User {
   courses     CourseInstructor[]
   snapshots   AttainmentSnapshot[]
   auditEvents AuditLog[]
+  sessions    Session[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+/// A server-side login session (NFR-10: session timeout). The row stores
+/// only the SHA-256 hash of the opaque token — the token itself exists
+/// once, in the client's cookie. Idle and absolute expiry are evaluated
+/// by packages/auth; revocation is a timestamp so history survives.
+model Session {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  tokenHash  String    @unique
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime // absolute cap
+  lastSeenAt DateTime  @default(now())
+  revokedAt  DateTime?
+  ip         String?
+  userAgent  String?
+
+  @@index([userId])
 }
 
 /// A role assignment with effect dates (§2: staff change hands between

@@ -1,0 +1,28 @@
+{
+  "name": "@copo/auth",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Authentication (local accounts now, OIDC-ready) and centralised authorisation for the CO-PO attainment application.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "create-admin": "tsx scripts/create-admin.ts"
+  },
+  "dependencies": {
+    "@copo/db": "*",
+    "@node-rs/argon2": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.2.0"
+  }
+}
