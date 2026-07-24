@@ -1,0 +1,267 @@
+'use server';
+
+import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
+import { Prisma } from '@copo/db';
+import { prisma } from '@/lib/db';
+import { guard } from '@/lib/authz';
+import { logAudit } from '@/lib/audit';
+import { resolveCourseParameters } from '@/lib/params';
+import { requireSession } from '@/lib/session';
+
+export async function createAssessmentAction(courseId: string, formData: FormData): Promise<void> {
+  const user = await requireSession();
+  await guard.require(user.userId, { type: 'course.write', courseId });
+
+  const name = String(formData.get('name') ?? '').trim();
+  const shape = String(formData.get('shape') ?? '') as 'SECTIONED' | 'ITEM_LIST' | 'SINGLE_SCORE';
+  const scoringRule = String(formData.get('scoringRule') ?? 'RUBRIC') as 'RUBRIC' | 'COHORT_BAND';
+  const weightGroup = String(formData.get('weightGroup') ?? '');
+  const maxMarkRaw = String(formData.get('maxMark') ?? '').trim();
+
+  const back = `/courses/${courseId}/assessments`;
+  if (!name) redirect(`${back}?error=Name+is+required`);
+  if (!['SECTIONED', 'ITEM_LIST', 'SINGLE_SCORE'].includes(shape)) redirect(`${back}?error=Choose+a+shape`);
+  if (scoringRule === 'COHORT_BAND' && shape !== 'SINGLE_SCORE') {
+    redirect(`${back}?error=Cohort-band+scoring+applies+to+a+single+total+score+only`);
+  }
+  const { parameters } = await resolveCourseParameters(courseId);
+  if (!(weightGroup in parameters.weightGroups)) redirect(`${back}?error=Choose+a+weight+group`);
+  const maxMark = Number(maxMarkRaw);
+  if (shape === 'SINGLE_SCORE' && (!Number.isFinite(maxMark) || maxMark <= 0)) {
+    redirect(`${back}?error=A+single-score+assessment+needs+its+maximum+mark`);
+  }
+
+  const displayOrder = (await prisma.assessment.count({ where: { courseId } })) + 1;
+  const assessment = await prisma.assessment.create({
+    data: {
+      courseId,
+      name,
+      shape,
+      scoringRule,
+      weightGroup,
+      displayOrder,
+      ...(shape === 'SECTIONED'
+        ? { sections: { create: { name: 'Section A', displayOrder: 1 } } }
+        : {}),
+      ...(shape === 'SINGLE_SCORE'
+        ? { items: { create: { label: 'Score', maxMark: new Prisma.Decimal(maxMark), displayOrder: 1 } } }
+        : {}),
+    },
+  });
+  await logAudit({
+    actorId: user.userId,
+    action: 'ASSESSMENT_CREATED',
+    entityType: 'Assessment',
+    entityId: assessment.id,
+    after: { courseId, name, shape, scoringRule, weightGroup },
+  });
+  redirect(`/courses/${courseId}/assessments/${assessment.id}`);
+}
+
+export async function deleteAssessmentAction(courseId: string, assessmentId: string): Promise<void> {
+  const user = await requireSession();
+  await guard.require(user.userId, { type: 'course.write', courseId });
+
+  const before = await prisma.assessment.findUniqueOrThrow({
+    where: { id: assessmentId },
+    include: { _count: { select: { items: true, sections: true } } },
+  });
+  if (before.courseId !== courseId) redirect(`/courses/${courseId}/assessments?error=Assessment+mismatch`);
+
+  try {
+    await prisma.$transaction([
+      prisma.assessmentCoTag.deleteMany({ where: { assessmentId } }),
+      prisma.item.deleteMany({ where: { assessmentId } }),
+      prisma.section.deleteMany({ where: { assessmentId } }),
+      prisma.assessment.delete({ where: { id: assessmentId } }),
+    ]);
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2003') {
+      redirect(`/courses/${courseId}/assessments?error=Marks+are+already+entered+against+this+assessment;+it+cannot+be+deleted`);
+    }
+    throw err;
+  }
+
+  await logAudit({
+    actorId: user.userId,
+    action: 'ASSESSMENT_DELETED',
+    entityType: 'Assessment',
+    entityId: assessmentId,
+    before: { courseId, name: before.name, shape: before.shape },
+  });
+  revalidatePath(`/courses/${courseId}/assessments`);
+  redirect(`/courses/${courseId}/assessments`);
+}
+
+// ── full-structure save from the editor ─────────────────────────────────
+
+export interface StructureItemInput {
+  id: string | null;
+  label: string;
+  maxMark: number;
+  coId: string | null;
+}
+export interface StructureSectionInput {
+  id: string | null;
+  name: string;
+  items: StructureItemInput[];
+}
+export interface StructurePayload {
+  name: string;
+  weightGroup: string;
+  scoringRule: 'RUBRIC' | 'COHORT_BAND';
+  sections?: StructureSectionInput[];
+  items?: StructureItemInput[];
+  single?: { maxMark: number; coTagIds: string[] };
+}
+
+export async function saveAssessmentStructureAction(
+  assessmentId: string,
+  payload: StructurePayload,
+): Promise<{ error?: string; ok?: boolean }> {
+  const user = await requireSession();
+
+  const assessment = await prisma.assessment.findUnique({
+    where: { id: assessmentId },
+    include: { sections: true, items: true, coTags: true },
+  });
+  if (!assessment) return { error: 'Assessment not found.' };
+  const courseId = assessment.courseId;
+  await guard.require(user.userId, { type: 'course.write', courseId });
+
+  // ── validation ──
+  if (!payload.name.trim()) return { error: 'The assessment needs a name.' };
+  if (payload.scoringRule === 'COHORT_BAND' && assessment.shape !== 'SINGLE_SCORE') {
+    return { error: 'Cohort-band scoring applies to a single total score only.' };
+  }
+  const { parameters } = await resolveCourseParameters(courseId);
+  if (!(payload.weightGroup in parameters.weightGroups)) {
+    return { error: `Unknown weight group '${payload.weightGroup}'. Groups: ${Object.keys(parameters.weightGroups).join(', ')}.` };
+  }
+  const courseCos = await prisma.courseOutcome.findMany({ where: { courseId }, select: { id: true } });
+  const coIds = new Set(courseCos.map((co) => co.id));
+
+  const allItems: StructureItemInput[] =
+    assessment.shape === 'SECTIONED'
+      ? (payload.sections ?? []).flatMap((section) => section.items)
+      : assessment.shape === 'ITEM_LIST'
+        ? (payload.items ?? [])
+        : [];
+  for (const item of allItems) {
+    if (!item.label.trim()) return { error: 'Every item needs a label.' };
+    if (!Number.isFinite(item.maxMark) || item.maxMark <= 0) return { error: `Item '${item.label}': maximum mark must be positive.` };
+    if (item.coId !== null && !coIds.has(item.coId)) return { error: `Item '${item.label}': unknown CO tag.` };
+  }
+  const labels = allItems.map((item) => item.label.trim());
+  if (new Set(labels).size !== labels.length) return { error: 'Item labels must be unique within the assessment.' };
+  if (assessment.shape === 'SECTIONED') {
+    const names = (payload.sections ?? []).map((section) => section.name.trim());
+    if (names.some((name) => !name)) return { error: 'Every section needs a name.' };
+    if (new Set(names).size !== names.length) return { error: 'Section names must be unique.' };
+    if ((payload.sections ?? []).length === 0) return { error: 'A sectioned assessment needs at least one section.' };
+  }
+  if (assessment.shape === 'SINGLE_SCORE') {
+    if (!payload.single || !Number.isFinite(payload.single.maxMark) || payload.single.maxMark <= 0) {
+      return { error: 'The maximum mark must be positive.' };
+    }
+    for (const coId of payload.single.coTagIds) {
+      if (!coIds.has(coId)) return { error: 'Unknown CO tag.' };
+    }
+  }
+
+  // ── reconcile, transactionally ──
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.assessment.update({
+        where: { id: assessmentId },
+        data: { name: payload.name.trim(), weightGroup: payload.weightGroup, scoringRule: payload.scoringRule },
+      });
+
+      if (assessment.shape === 'SINGLE_SCORE') {
+        const single = assessment.items[0];
+        if (!single) throw new Error('single-score assessment has no item row');
+        await tx.item.update({ where: { id: single.id }, data: { maxMark: new Prisma.Decimal(payload.single!.maxMark) } });
+        await tx.assessmentCoTag.deleteMany({ where: { assessmentId } });
+        if (payload.single!.coTagIds.length > 0) {
+          await tx.assessmentCoTag.createMany({ data: payload.single!.coTagIds.map((coId) => ({ assessmentId, coId })) });
+        }
+        return;
+      }
+
+      const keptItemIds = new Set(allItems.filter((item) => item.id).map((item) => item.id as string));
+      for (const existing of assessment.items) {
+        if (!keptItemIds.has(existing.id)) await tx.item.delete({ where: { id: existing.id } });
+      }
+
+      if (assessment.shape === 'SECTIONED') {
+        const keptSectionIds = new Set((payload.sections ?? []).filter((s) => s.id).map((s) => s.id as string));
+        for (const existing of assessment.sections) {
+          if (!keptSectionIds.has(existing.id)) await tx.section.delete({ where: { id: existing.id } });
+        }
+        for (const [sectionIndex, section] of (payload.sections ?? []).entries()) {
+          let sectionId = section.id;
+          if (sectionId) {
+            await tx.section.update({
+              where: { id: sectionId },
+              data: { name: section.name.trim(), displayOrder: sectionIndex + 1 },
+            });
+          } else {
+            const created = await tx.section.create({
+              data: { assessmentId, name: section.name.trim(), displayOrder: sectionIndex + 1 },
+            });
+            sectionId = created.id;
+          }
+          for (const [itemIndex, item] of section.items.entries()) {
+            const data = {
+              label: item.label.trim(),
+              maxMark: new Prisma.Decimal(item.maxMark),
+              coId: item.coId,
+              sectionId,
+              displayOrder: itemIndex + 1,
+            };
+            if (item.id) await tx.item.update({ where: { id: item.id }, data });
+            else await tx.item.create({ data: { ...data, assessmentId } });
+          }
+        }
+      } else {
+        for (const [itemIndex, item] of (payload.items ?? []).entries()) {
+          const data = {
+            label: item.label.trim(),
+            maxMark: new Prisma.Decimal(item.maxMark),
+            coId: item.coId,
+            displayOrder: itemIndex + 1,
+          };
+          if (item.id) await tx.item.update({ where: { id: item.id }, data });
+          else await tx.item.create({ data: { ...data, assessmentId, sectionId: null } });
+        }
+      }
+    });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2003') {
+      return { error: 'Marks are already entered against a removed item; clear them first.' };
+    }
+    throw err;
+  }
+
+  await logAudit({
+    actorId: user.userId,
+    action: 'ASSESSMENT_STRUCTURE_SAVED',
+    entityType: 'Assessment',
+    entityId: assessmentId,
+    before: {
+      name: assessment.name,
+      weightGroup: assessment.weightGroup,
+      sections: assessment.sections.length,
+      items: assessment.items.length,
+    },
+    after: {
+      name: payload.name,
+      weightGroup: payload.weightGroup,
+      sections: payload.sections?.length ?? 0,
+      items: allItems.length || (assessment.shape === 'SINGLE_SCORE' ? 1 : 0),
+    },
+  });
+  revalidatePath(`/courses/${courseId}/assessments`, 'layout');
+  return { ok: true };
+}

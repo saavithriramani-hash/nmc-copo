@@ -1,0 +1,92 @@
+import Link from 'next/link';
+import { prisma } from '@/lib/db';
+import { requireSession } from '@/lib/session';
+
+/**
+ * Landing: the courses this user works with — own courses for faculty,
+ * every department course for an HoD, programme courses for a
+ * coordinator. The list is scoped by the same rules the Guard enforces;
+ * opening a course still passes through guard.require on every read.
+ */
+export default async function HomePage() {
+  const user = await requireSession();
+
+  const courses = await prisma.course.findMany({
+    where: {
+      OR: [
+        { instructors: { some: { userId: user.userId } } },
+        ...(user.hodDepartmentIds.length > 0
+          ? [{ batch: { programme: { departmentId: { in: user.hodDepartmentIds } } } }]
+          : []),
+        ...(user.coordinatorProgrammeIds.length > 0
+          ? [{ batch: { programmeId: { in: user.coordinatorProgrammeIds } } }]
+          : []),
+      ],
+    },
+    include: {
+      batch: { include: { programme: { include: { department: true } } } },
+      instructors: { include: { user: { select: { fullName: true } } } },
+      _count: { select: { cos: true, assessments: true, enrolments: true } },
+    },
+    orderBy: [{ code: 'asc' }],
+  });
+
+  const canCreate = user.hodDepartmentIds.length > 0;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-lg font-semibold">Courses</h1>
+        {canCreate ? (
+          <Link href="/courses/new" className="bg-blue-700 text-white rounded px-3 py-1.5 hover:bg-blue-800">
+            New course
+          </Link>
+        ) : null}
+      </div>
+
+      {courses.length === 0 ? (
+        <p className="text-gray-600">
+          No courses yet.{' '}
+          {canCreate ? 'Create the first course of your department.' : 'Courses appear here once your HoD assigns you.'}
+        </p>
+      ) : (
+        <table className="w-full bg-white border-collapse">
+          <thead>
+            <tr className="bg-gray-100 text-left">
+              <th className="border border-gray-300 px-2 py-1">Code</th>
+              <th className="border border-gray-300 px-2 py-1">Title</th>
+              <th className="border border-gray-300 px-2 py-1">Programme / Batch</th>
+              <th className="border border-gray-300 px-2 py-1">Sem</th>
+              <th className="border border-gray-300 px-2 py-1">Faculty</th>
+              <th className="border border-gray-300 px-2 py-1">COs</th>
+              <th className="border border-gray-300 px-2 py-1">Assessments</th>
+              <th className="border border-gray-300 px-2 py-1">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {courses.map((course) => (
+              <tr key={course.id} className="hover:bg-blue-50">
+                <td className="border border-gray-300 px-2 py-1">
+                  <Link href={`/courses/${course.id}`} className="text-blue-700 hover:underline font-medium">
+                    {course.code}
+                  </Link>
+                </td>
+                <td className="border border-gray-300 px-2 py-1">{course.title}</td>
+                <td className="border border-gray-300 px-2 py-1">
+                  {course.batch.programme.name} · {course.batch.name}
+                </td>
+                <td className="border border-gray-300 px-2 py-1">{course.semester}</td>
+                <td className="border border-gray-300 px-2 py-1">
+                  {course.instructors.map((i) => i.user.fullName).join(', ') || '—'}
+                </td>
+                <td className="border border-gray-300 px-2 py-1 text-center">{course._count.cos}</td>
+                <td className="border border-gray-300 px-2 py-1 text-center">{course._count.assessments}</td>
+                <td className="border border-gray-300 px-2 py-1">{course.status}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}

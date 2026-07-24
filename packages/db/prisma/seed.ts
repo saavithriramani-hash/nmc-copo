@@ -14,6 +14,7 @@
  *   npx prisma migrate reset   (drops, migrates, reseeds)
  */
 import { PrismaClient, Prisma } from '@prisma/client';
+import { hash } from '@node-rs/argon2';
 import { DEFAULT_PARAMETERS } from '@copo/engine';
 
 const prisma = new PrismaClient();
@@ -118,13 +119,19 @@ async function main(): Promise<void> {
   });
 
   // ── users and roles ────────────────────────────────────────────────────
-  // passwordHash is a dev placeholder — real hashing arrives with the
-  // application's auth layer (Phase 1, local accounts).
+  // DEV-ONLY credentials: every seeded account logs in with the password
+  // below. Never reuse this seed or password outside local development.
+  // argon2id (library default; pinned by packages/auth tests), same cost
+  // profile as packages/auth.
+  const DEV_PASSWORD = 'copo-dev-password';
+  const devHash = await hash(DEV_PASSWORD, { memoryCost: 19456, timeCost: 2, parallelism: 1 });
   await prisma.user.createMany({
     data: [
-      { id: 'user-admin', email: 'admin@nmc.dev', fullName: 'System Administrator', passwordHash: 'DEV-PLACEHOLDER' },
-      { id: 'user-hod-math', email: 'hod.math@nmc.dev', fullName: 'HoD Mathematics', passwordHash: 'DEV-PLACEHOLDER' },
-      { id: 'user-fac-1', email: 'faculty1@nmc.dev', fullName: 'Course Faculty', passwordHash: 'DEV-PLACEHOLDER' },
+      { id: 'user-admin', email: 'admin@nmc.dev', fullName: 'System Administrator', passwordHash: devHash, mustChangePassword: false },
+      { id: 'user-hod-math', email: 'hod.math@nmc.dev', fullName: 'HoD Mathematics', passwordHash: devHash, mustChangePassword: false },
+      { id: 'user-fac-1', email: 'faculty1@nmc.dev', fullName: 'Course Faculty', passwordHash: devHash, mustChangePassword: false },
+      { id: 'user-coord-math', email: 'coord.math@nmc.dev', fullName: 'Programme Coordinator (Mathematics)', passwordHash: devHash, mustChangePassword: false },
+      { id: 'user-fac-2', email: 'faculty2@nmc.dev', fullName: 'Second Faculty', passwordHash: devHash, mustChangePassword: false },
     ],
   });
   const effectiveFrom = new Date('2024-06-01T00:00:00Z');
@@ -133,6 +140,8 @@ async function main(): Promise<void> {
       { id: 'role-admin', userId: 'user-admin', kind: 'ADMIN', effectiveFrom },
       { id: 'role-hod', userId: 'user-hod-math', kind: 'HOD', departmentId: 'dept-math', effectiveFrom },
       { id: 'role-fac', userId: 'user-fac-1', kind: 'FACULTY', effectiveFrom },
+      { id: 'role-coord', userId: 'user-coord-math', kind: 'PROGRAMME_COORDINATOR', programmeId: 'prog-bsc-math', effectiveFrom },
+      { id: 'role-fac-2', userId: 'user-fac-2', kind: 'FACULTY', effectiveFrom },
     ],
   });
 
@@ -341,6 +350,7 @@ async function main(): Promise<void> {
   };
   console.log('Seed complete:', counts);
   console.log('Course id: course-mat301 — try `npm run smoke` to run the adapter + engine against it.');
+  console.log(`DEV logins (password "${DEV_PASSWORD}", local only): admin@nmc.dev, hod.math@nmc.dev, faculty1@nmc.dev, faculty2@nmc.dev, coord.math@nmc.dev`);
 }
 
 main()

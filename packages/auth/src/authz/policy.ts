@@ -85,6 +85,15 @@ export function decide(actor: ActorContext, action: Action, resource: ResourceCo
       if (has(actor, 'PRINCIPAL')) return allow('PRINCIPAL');
       return deny('OUT_OF_SCOPE');
     }
+    case 'course.create':
+    case 'templates.manage': {
+      // Courses are created, and assessment templates defined, by the
+      // department chain (§2 HoD: all faculty capability department-wide;
+      // FR-8: "a department defines reusable patterns").
+      if (resource?.kind !== 'department') return deny('RESOURCE_NOT_FOUND');
+      if (isHodOf(actor, resource.departmentId)) return allow('HOD');
+      return deny('OUT_OF_SCOPE');
+    }
 
     // ── institution-wide ─────────────────────────────────────────────
     case 'institution.read': {

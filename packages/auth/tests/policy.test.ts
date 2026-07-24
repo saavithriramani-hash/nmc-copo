@@ -193,6 +193,22 @@ describe('policy — system administrator: accounts and infrastructure, never ac
   });
 });
 
+describe('policy — course creation and assessment templates (department chain)', () => {
+  it('the HoD creates courses and manages templates in their department only', () => {
+    expect(decide(hodMath, { type: 'course.create', departmentId: 'dept-math' }, DEPT_MATH).allow).toBe(true);
+    expect(decide(hodMath, { type: 'templates.manage', departmentId: 'dept-math' }, DEPT_MATH).allow).toBe(true);
+    expect(decide(hodMath, { type: 'course.create', departmentId: 'dept-physics' }, DEPT_PHYS).allow).toBe(false);
+    expect(decide(hodMath, { type: 'templates.manage', departmentId: 'dept-physics' }, DEPT_PHYS).allow).toBe(false);
+  });
+
+  it('faculty, coordinator, IQAC and admin do not create courses or manage templates', () => {
+    for (const who of [facultyMath1, coordMath, iqac, admin, principal]) {
+      expect(decide(who, { type: 'course.create', departmentId: 'dept-math' }, DEPT_MATH).allow, who.userId).toBe(false);
+      expect(decide(who, { type: 'templates.manage', departmentId: 'dept-math' }, DEPT_MATH).allow, who.userId).toBe(false);
+    }
+  });
+});
+
 describe('policy — cross-cutting', () => {
   it('an inactive account is denied everything, whatever its roles', () => {
     const inactiveHod = actor('hod-math', hodMath.roles, false);

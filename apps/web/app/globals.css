@@ -1,0 +1,20 @@
+@import 'tailwindcss';
+
+/* Dense, Excel-adjacent defaults: small text, tight tables, visible focus. */
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-gray-50 text-gray-900 text-sm;
+}
+
+/* Every focusable control gets an unmistakable keyboard focus ring. */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid #1d4ed8;
+  outline-offset: 0;
+}

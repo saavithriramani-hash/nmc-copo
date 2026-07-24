@@ -1,14 +1,18 @@
 import { randomBytes, randomInt } from 'node:crypto';
-import { Algorithm, hash, verify } from '@node-rs/argon2';
+import { hash, verify } from '@node-rs/argon2';
 
 /**
  * Password hashing: argon2id with the OWASP-recommended cost profile
  * (19 MiB memory, 2 iterations, parallelism 1). Hashes embed their own
  * parameters, so these can be raised later without invalidating stored
  * hashes; needsRehash() reports stragglers at login time.
+ *
+ * The algorithm option is deliberately omitted: @node-rs/argon2 defaults
+ * to argon2id, its `Algorithm` const enum cannot be referenced under
+ * isolatedModules, and the argon2id default is PINNED BY TEST —
+ * password.test.ts asserts every fresh hash starts with "$argon2id$".
  */
 const ARGON2_OPTIONS = {
-  algorithm: Algorithm.Argon2id,
   memoryCost: 19456, // KiB = 19 MiB
   timeCost: 2,
   parallelism: 1,

@@ -110,8 +110,29 @@ model Department {
 
   programmes Programme[]
   roles      Role[]
+  templates  AssessmentTemplate[]
 
   @@unique([institutionId, name])
+}
+
+/// FR-8: a department-defined reusable assessment pattern — "two CIAs of
+/// four sections, a quiz, a seminar, an assignment". With ~700 course
+/// instances a semester this is the single largest time saving in the
+/// system. The pattern JSON stores assessment blueprints whose CO tags
+/// are 1-based CO-ORDER SLOTS (CO1, CO2, …), resolved against a course's
+/// own COs when adopted. Captured from an existing course's structure;
+/// adoption copies structure only — never marks, never enrolments.
+model AssessmentTemplate {
+  id           String     @id @default(cuid())
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  name         String
+  description  String?
+  pattern      Json
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([departmentId, name])
 }
 
 model Programme {

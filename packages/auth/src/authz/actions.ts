@@ -25,7 +25,10 @@ export type ProgrammeActionType =
   | 'settings.programme.write'; // programme-level parameter override
 
 /** Actions on one department. */
-export type DepartmentActionType = 'department.read'; // department consolidation
+export type DepartmentActionType =
+  | 'department.read' // department consolidation
+  | 'course.create' // create a course in a batch of this department (FR-4)
+  | 'templates.manage'; // department assessment templates (FR-8)
 
 /** Institution-wide actions (no resource id). */
 export type InstitutionActionType =

@@ -3,7 +3,8 @@
   "private": true,
   "description": "CO-PO attainment application for Nehru Memorial College (Autonomous). See CLAUDE.md.",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "apps/*"
   ],
   "engines": {
     "node": ">=20"
