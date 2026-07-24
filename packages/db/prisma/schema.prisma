@@ -1,0 +1,506 @@
+// CO-PO attainment — persistence schema (requirements §3).
+//
+// Integrity posture: everything the requirements call structural is
+// enforced BY THE DATABASE, not merely by application code.
+//
+//  - One roster per batch: a register number exists once per batch
+//    (BatchRoster @@unique). An Enrolment references a roster entry and a
+//    course, and the duplicated batchId in its two composite foreign keys
+//    makes it impossible to enrol a student into a course of a different
+//    batch. No course ever holds a free-typed register number.
+//  - A MarkValue references an Enrolment and an Item by foreign key —
+//    never a typed string. Its duplicated assessmentId/courseId columns
+//    are pinned by composite foreign keys, so a mark can never point at
+//    an item of one course and an enrolment of another.
+//  - MarkValue.value is nullable: NULL means "did not attempt" and is a
+//    different fact from 0 ("attempted, scored nothing").
+//  - Attainment parameters cascade institution → programme → course:
+//    the institution row carries the complete non-null set; programme and
+//    course carry nullable overrides. The resolved source of every field
+//    is recoverable by inspecting which level is non-null (the adapter
+//    returns it via the engine's step2ResolveParameters provenance).
+//  - AttainmentSnapshot is immutable once written: a database trigger in
+//    the initial migration rejects UPDATE and DELETE outright.
+//  - CHECK constraints (mark ≥ 0, strength ∈ 1..3, maxMark > 0, feedback
+//    counts ≥ 0) live in the initial migration — Prisma cannot express
+//    them in this file, but they are part of the schema of record.
+//
+// Scale: MarkValue is the ~25-million-row table. It has exactly two
+// access paths, both indexed: the primary key (enrolmentId, itemId)
+// serves "all marks for one enrolment" by prefix, and the
+// (assessmentId, enrolmentId) index serves "all marks for one
+// assessment". Summaries are computed in SQL (see src/queries.ts) —
+// never by loading a course's marks into application memory (NFR-1).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────────── enums ─────────────────────────────
+
+enum OutcomeKind {
+  PO
+  PSO
+}
+
+enum AssessmentShape {
+  SECTIONED
+  ITEM_LIST
+  SINGLE_SCORE
+}
+
+enum ScoringRule {
+  RUBRIC
+  COHORT_BAND
+}
+
+enum CourseStatus {
+  DRAFT
+  SUBMITTED
+  LOCKED
+}
+
+enum RoleKind {
+  ADMIN
+  PRINCIPAL
+  IQAC
+  PROGRAMME_COORDINATOR
+  HOD
+  FACULTY
+}
+
+enum IdentityProvider {
+  LOCAL
+  GOOGLE
+}
+
+// ─────────────────────── institution structure ───────────────────────
+
+model Institution {
+  id   String @id @default(cuid())
+  name String @unique
+
+  // Attainment parameter DEFAULTS (§4) — the complete set, all required.
+  // Band tables are JSON in the engine's own shape; the engine validates
+  // them at resolution time (validateParameters).
+  thresholdFraction     Decimal @db.Decimal(4, 3)
+  bands                 Json
+  cohortBands           Json
+  weightGroups          Json
+  directWeight          Decimal @db.Decimal(4, 3)
+  indirectWeight        Decimal @db.Decimal(4, 3)
+  targetAttainment      Decimal @db.Decimal(4, 2)
+  feedbackResponseFloor Int
+
+  departments Department[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Department {
+  id            String      @id @default(cuid())
+  institutionId String
+  institution   Institution @relation(fields: [institutionId], references: [id], onDelete: Restrict)
+  name          String
+
+  programmes Programme[]
+  roles      Role[]
+
+  @@unique([institutionId, name])
+}
+
+model Programme {
+  id           String     @id @default(cuid())
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  name         String
+
+  // Parameter OVERRIDES (§4): null = inherit from the institution.
+  thresholdFraction     Decimal? @db.Decimal(4, 3)
+  bands                 Json?
+  cohortBands           Json?
+  weightGroups          Json?
+  directWeight          Decimal? @db.Decimal(4, 3)
+  indirectWeight        Decimal? @db.Decimal(4, 3)
+  targetAttainment      Decimal? @db.Decimal(4, 2)
+  feedbackResponseFloor Int?
+
+  outcomes ProgrammeOutcome[]
+  batches  Batch[]
+  roles    Role[]
+
+  @@unique([departmentId, name])
+}
+
+/// A PO or PSO definition. Each programme owns its full set (§3 / FR-2).
+model ProgrammeOutcome {
+  id           String      @id @default(cuid())
+  programmeId  String
+  programme    Programme   @relation(fields: [programmeId], references: [id], onDelete: Restrict)
+  code         String // "PO1", "PSO2" — display identity
+  kind         OutcomeKind
+  statement    String
+  displayOrder Int
+
+  matrixEntries ArticulationMatrix[]
+
+  @@unique([programmeId, code])
+}
+
+model Batch {
+  id          String    @id @default(cuid())
+  programmeId String
+  programme   Programme @relation(fields: [programmeId], references: [id], onDelete: Restrict)
+  name        String // "2024–2027"
+  startYear   Int
+  endYear     Int
+
+  roster  BatchRoster[]
+  courses Course[]
+
+  @@unique([programmeId, name])
+}
+
+// ───────────────────────── students and rosters ─────────────────────────
+
+model Student {
+  id       String  @id @default(cuid())
+  fullName String
+  email    String?
+
+  rosterEntries BatchRoster[]
+  createdAt     DateTime      @default(now())
+}
+
+/// One row = one student's membership of one batch, carrying the register
+/// number. THE register number lives here and only here (§3: entered once
+/// per batch) — courses and marks reach it exclusively through foreign
+/// keys, so internal and external marks are joinable per student by
+/// construction.
+model BatchRoster {
+  id             String  @id @default(cuid())
+  batchId        String
+  batch          Batch   @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  studentId      String
+  student        Student @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  registerNumber String
+
+  enrolments Enrolment[]
+
+  @@unique([batchId, registerNumber]) // a register number exists once per batch
+  @@unique([batchId, studentId]) // a student joins a batch once
+  @@unique([id, batchId]) // composite-FK target: pins an enrolment's roster entry to a batch
+}
+
+// ─────────────────────────── course structure ───────────────────────────
+
+model Course {
+  id       String       @id @default(cuid())
+  batchId  String
+  batch    Batch        @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  code     String
+  title    String
+  semester Int
+  credits  Decimal?     @db.Decimal(4, 1)
+  status   CourseStatus @default(DRAFT)
+
+  // Parameter OVERRIDES (§4): null = inherit programme, then institution.
+  // A course-level value records an Academic-Council-minuted exception.
+  thresholdFraction     Decimal? @db.Decimal(4, 3)
+  bands                 Json?
+  cohortBands           Json?
+  weightGroups          Json?
+  directWeight          Decimal? @db.Decimal(4, 3)
+  indirectWeight        Decimal? @db.Decimal(4, 3)
+  targetAttainment      Decimal? @db.Decimal(4, 2)
+  feedbackResponseFloor Int?
+
+  cos         CourseOutcome[]
+  assessments Assessment[]
+  enrolments  Enrolment[]
+  instructors CourseInstructor[]
+  snapshots   AttainmentSnapshot[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([batchId, code])
+  @@unique([id, batchId]) // composite-FK target: pins an enrolment's course to a batch
+}
+
+/// Course ↔ faculty assignment (FR-4). A course may be co-taught.
+model CourseInstructor {
+  courseId String
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@id([courseId, userId])
+  @@index([userId])
+}
+
+/// A Course Outcome (§3 / FR-5). Levels of attainment for it are computed,
+/// never stored — except inside a locked AttainmentSnapshot.
+model CourseOutcome {
+  id           String @id @default(cuid())
+  courseId     String
+  course       Course @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  code         String // "CO1"
+  statement    String
+  bloomLevel   String
+  displayOrder Int
+
+  matrixEntries ArticulationMatrix[]
+  items         Item[]
+  assessmentTag AssessmentCoTag[]
+  indirect      IndirectFeedback?
+
+  @@unique([courseId, code])
+  @@unique([id, courseId]) // composite-FK target for same-course references
+}
+
+/// One cell of the CO↔PO/PSO articulation matrix (FR-6). A cell's absence
+/// means "unmapped" — strength is never null, and 1..3 is CHECK-enforced
+/// in the migration. Weightages are always derived from these rows on
+/// demand, never stored (§9).
+model ArticulationMatrix {
+  coId     String
+  co       CourseOutcome    @relation(fields: [coId], references: [id], onDelete: Restrict)
+  poId     String
+  po       ProgrammeOutcome @relation(fields: [poId], references: [id], onDelete: Restrict)
+  strength Int
+
+  @@id([coId, poId])
+  @@index([poId])
+}
+
+// ────────────────────────────── enrolment ──────────────────────────────
+
+/// One student taking one course, always via the batch roster. batchId is
+/// deliberately duplicated here: its two composite foreign keys —
+/// (courseId, batchId) → Course(id, batchId) and (rosterEntryId, batchId)
+/// → BatchRoster(id, batchId) — make an enrolment that crosses batches
+/// unrepresentable in the database.
+model Enrolment {
+  id            String      @id @default(cuid())
+  courseId      String
+  rosterEntryId String
+  batchId       String
+  course        Course      @relation(fields: [courseId, batchId], references: [id, batchId], onDelete: Restrict)
+  rosterEntry   BatchRoster @relation(fields: [rosterEntryId, batchId], references: [id, batchId], onDelete: Restrict)
+
+  markValues MarkValue[]
+
+  @@unique([courseId, rosterEntryId]) // one enrolment per student per course
+  @@unique([id, courseId]) // composite-FK target: pins a mark's enrolment to a course
+  @@index([rosterEntryId])
+}
+
+// ────────────────────────────── assessments ──────────────────────────────
+
+model Assessment {
+  id           String          @id @default(cuid())
+  courseId     String
+  course       Course          @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  name         String
+  shape        AssessmentShape
+  scoringRule  ScoringRule
+  weightGroup  String // key into the resolved weightGroups table (§4.4)
+  displayOrder Int
+
+  sections   Section[]
+  items      Item[]
+  coTags     AssessmentCoTag[]
+  markValues MarkValue[]
+
+  @@unique([courseId, name])
+  @@unique([id, courseId]) // composite-FK target: pins a mark's assessment to a course
+}
+
+/// User-named section of a SECTIONED assessment (§3.1 — any number, freely
+/// named, never fixed to A–D).
+model Section {
+  id           String     @id @default(cuid())
+  assessmentId String
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Restrict)
+  name         String
+  displayOrder Int
+
+  items Item[]
+
+  @@unique([assessmentId, name])
+  @@unique([id, assessmentId]) // composite-FK target: pins an item's section to its assessment
+}
+
+/// A mark-bearing item. SECTIONED: one row per question, sectionId set.
+/// ITEM_LIST: one row per item, sectionId null. SINGLE_SCORE: exactly one
+/// row (the score), sectionId null — enforced by the application/adapter,
+/// while every mark still references a real Item row by foreign key.
+/// coId is the CO tag; null = untagged → applies to every CO (§3.1).
+/// SINGLE_SCORE multi-CO tags live in AssessmentCoTag instead.
+model Item {
+  id           String     @id @default(cuid())
+  assessmentId String
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Restrict)
+  sectionId    String?
+  section      Section?   @relation(fields: [sectionId, assessmentId], references: [id, assessmentId], onDelete: Restrict)
+  label        String // "Q1(a)"
+  maxMark      Decimal    @db.Decimal(6, 2)
+  coId         String?
+  co           CourseOutcome? @relation(fields: [coId], references: [id], onDelete: Restrict)
+  displayOrder Int
+
+  markValues MarkValue[]
+
+  @@unique([assessmentId, label])
+  @@unique([id, assessmentId]) // composite-FK target: pins a mark's item to its assessment
+  @@index([sectionId])
+}
+
+/// CO tags for a SINGLE_SCORE assessment (one score, one or more COs —
+/// §3.1). No rows = untagged = applies to every CO.
+model AssessmentCoTag {
+  assessmentId String
+  assessment   Assessment    @relation(fields: [assessmentId], references: [id], onDelete: Restrict)
+  coId         String
+  co           CourseOutcome @relation(fields: [coId], references: [id], onDelete: Restrict)
+
+  @@id([assessmentId, coId])
+  @@index([coId])
+}
+
+// ──────────────────────────────── marks ────────────────────────────────
+
+/// One student's mark on one item. THE hot table (~25M rows over a cycle).
+///
+///  - value NULL = "did not attempt" (excluded from denominators);
+///    0 = "attempted, scored nothing" (included). Distinct here, distinct
+///    in the engine, distinct in the UI.
+///  - References are foreign keys only — an enrolment and an item, never
+///    a register number.
+///  - assessmentId and courseId are duplicated on purpose and pinned by
+///    composite FKs: (itemId, assessmentId) → Item, (assessmentId,
+///    courseId) → Assessment, (enrolmentId, courseId) → Enrolment. A mark
+///    whose enrolment and item belong to different courses is
+///    unrepresentable.
+///  - Access paths: PK (enrolmentId, itemId) — all marks for one enrolment
+///    by prefix; index (assessmentId, enrolmentId) — all marks for one
+///    assessment. Nothing else. Summaries use SQL aggregation (NFR-1).
+model MarkValue {
+  enrolmentId  String
+  itemId       String
+  assessmentId String
+  courseId     String
+  value        Decimal? @db.Decimal(6, 2)
+  updatedAt    DateTime @updatedAt
+
+  enrolment  Enrolment  @relation(fields: [enrolmentId, courseId], references: [id, courseId], onDelete: Restrict)
+  item       Item       @relation(fields: [itemId, assessmentId], references: [id, assessmentId], onDelete: Restrict)
+  assessment Assessment @relation(fields: [assessmentId, courseId], references: [id, courseId], onDelete: Restrict)
+
+  @@id([enrolmentId, itemId])
+  @@index([assessmentId, enrolmentId])
+}
+
+// ─────────────────────────── indirect feedback ───────────────────────────
+
+/// CO-wise 3-point feedback counts (Procedure Step 8). One row per CO;
+/// counts are CHECK-enforced non-negative in the migration.
+model IndirectFeedback {
+  coId String        @id
+  co   CourseOutcome @relation(fields: [coId], references: [id], onDelete: Restrict)
+  n1   Int
+  n2   Int
+  n3   Int
+
+  updatedAt DateTime @updatedAt
+}
+
+// ─────────────────────────────── snapshots ───────────────────────────────
+
+/// The ONLY place a derived value is ever stored (CLAUDE.md invariant):
+/// the immutable record of a locked course. Stores the exact engine input
+/// and the full result, plus the engine version, so an auditor can replay
+/// the computation byte for byte. A trigger in the initial migration
+/// rejects UPDATE and DELETE — unlocking a course creates a NEW version
+/// (FR-16), it never rewrites history.
+model AttainmentSnapshot {
+  id            String   @id @default(cuid())
+  courseId      String
+  course        Course   @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  version       Int
+  engineVersion String
+  input         Json // the engine CourseInput, exactly as computed
+  result        Json // the engine CourseResult, warnings included
+  createdAt     DateTime @default(now())
+  createdById   String
+  createdBy     User     @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@unique([courseId, version])
+}
+
+// ──────────────────────────── users and roles ────────────────────────────
+
+/// §2.1: stable internal id (never the email), identity_provider for the
+/// later Google Workspace migration — accounts are re-pointed by email,
+/// audit history intact.
+model User {
+  id                 String           @id @default(cuid())
+  email              String           @unique
+  fullName           String
+  identityProvider   IdentityProvider @default(LOCAL)
+  passwordHash       String? // null once the account moves to OIDC
+  mustChangePassword Boolean          @default(true)
+  isActive           Boolean          @default(true)
+
+  roles       Role[]
+  courses     CourseInstructor[]
+  snapshots   AttainmentSnapshot[]
+  auditEvents AuditLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// A role assignment with effect dates (§2: staff change hands between
+/// accreditation cycles; the file must still record who computed what).
+/// Scope: HOD → departmentId; PROGRAMME_COORDINATOR → programmeId;
+/// institution-wide roles leave both null.
+model Role {
+  id            String      @id @default(cuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  kind          RoleKind
+  departmentId  String?
+  department    Department? @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  programmeId   String?
+  programme     Programme?  @relation(fields: [programmeId], references: [id], onDelete: Restrict)
+  effectiveFrom DateTime
+  effectiveTo   DateTime? // null = current
+
+  @@index([userId])
+}
+
+// ──────────────────────────────── audit ────────────────────────────────
+
+/// FR-17 / NFR-9: who changed what, when, and the prior value. Append-only
+/// by convention; high-volume, so BigInt PK and covering indexes.
+model AuditLog {
+  id         BigInt   @id @default(autoincrement())
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  action     String // e.g. "MARK_UPDATE", "COURSE_LOCK"
+  entityType String // e.g. "MarkValue"
+  entityId   String
+  before     Json?
+  after      Json?
+  at         DateTime @default(now())
+
+  @@index([entityType, entityId, at])
+  @@index([actorId, at])
+}

@@ -1,0 +1,38 @@
+{
+  "name": "@copo/db",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Persistence layer: Prisma schema, migrations, seed, and the adapter that turns database rows into the engine's CourseInput.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "generate": "prisma generate",
+    "migrate:dev": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "db:up": "docker compose -f docker-compose.dev.yml up -d",
+    "db:down": "docker compose -f docker-compose.dev.yml down",
+    "seed": "prisma db seed",
+    "smoke": "tsx src/scripts/smoke.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@copo/engine": "*",
+    "@prisma/client": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "prisma": "^6.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.2.0"
+  }
+}

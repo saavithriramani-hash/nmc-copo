@@ -1,0 +1,18 @@
+# LOCAL DEVELOPMENT ONLY — a throwaway Postgres for migrations and the seed.
+# The production Docker Compose (app + Postgres + backup sidecar, NFR-5)
+# is a separate, later deliverable at the repository root.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: copo-dev-postgres
+    environment:
+      POSTGRES_USER: copo
+      POSTGRES_PASSWORD: copo
+      POSTGRES_DB: copo_dev
+    ports:
+      - "5433:5432" # 5433 to avoid clashing with any locally installed Postgres
+    volumes:
+      - copo_dev_pgdata:/var/lib/postgresql/data
+
+volumes:
+  copo_dev_pgdata:
