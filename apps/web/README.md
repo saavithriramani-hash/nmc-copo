@@ -26,10 +26,11 @@ course-setup cloning.
 | Screen | Notes |
 |---|---|
 | `/` | Courses scoped like the Guard scopes them (own / department / programme) |
-| `/admin/departments` | Admin: institution bootstrap (engine defaults), departments, programmes |
+| `/admin/departments` | Admin: institution bootstrap (engine defaults), departments, programmes. **Rename and delete** for department/programme/batch (batch controls live on the programme page): deletion refuses while anything references the row and names every blocker; never a cascade over courses, marks, rosters, roles or locked snapshots. `onDelete: Restrict` enforces the same rule at the database, so the check-then-delete race fails safe |
+| `/admin/users` | Admin: accounts and role assignments (§2). Create account → one-time temporary password (returned in the action result, never in a URL); grant/end roles with effect dates; reset, deactivate, reactivate. Refuses to strand the institution: you cannot deactivate yourself, nor end the last administrator |
 | `/programmes/[id]` | Coordinator edits PO/PSOs; admin adds batches |
 | `/courses/new` | HoD creates a course (`course.create`, server-derived department) |
-| `/courses/[id]` | Details + assigned faculty |
+| `/courses/[id]` | Details (faculty, while DRAFT) + assigned faculty. **Staffing is `course.staff` — HoD only**: faculty see the roster read-only. Assigning an account without the Faculty role is refused (it would grant nothing), and the last instructor cannot be removed |
 | `…/outcomes` | CO editor (code, statement, Bloom level, reorder) |
 | `…/matrix` | COs down, POs/PSOs across, cells 1/2/3/blank. **Weightages recompute live under each column via the engine's own `step1ArticulationWeightages`** — what faculty see while typing is what the report computes |
 | `…/assessments` | List + add (any shape/rule/group) + **adopt template** + **clone setup** + save-as-template (HoD) |
