@@ -1,7 +1,10 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createDepartmentAction, createInstitutionAction, createProgrammeAction } from '@/actions/structure';
+import { StructureControls } from '@/components/StructureControls';
 import { prisma } from '@/lib/db';
 import { requireSession } from '@/lib/session';
+import { pluralise } from '@/lib/structureAdmin';
 
 export default async function DepartmentsPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const user = await requireSession();
@@ -10,7 +13,13 @@ export default async function DepartmentsPage({ searchParams }: { searchParams: 
 
   const institution = await prisma.institution.findFirst();
   const departments = await prisma.department.findMany({
-    include: { programmes: { include: { _count: { select: { batches: true } } } } },
+    include: {
+      programmes: {
+        include: { _count: { select: { batches: true, outcomes: true } } },
+        orderBy: { name: 'asc' },
+      },
+      _count: { select: { programmes: true, roles: true, templates: true } },
+    },
     orderBy: { name: 'asc' },
   });
 
@@ -49,13 +58,38 @@ export default async function DepartmentsPage({ searchParams }: { searchParams: 
             <tbody>
               {departments.map((dept) => (
                 <tr key={dept.id}>
-                  <td className="border border-gray-300 px-2 py-1 font-medium align-top">{dept.name}</td>
-                  <td className="border border-gray-300 px-2 py-1 align-top">
-                    {dept.programmes.length === 0
-                      ? '—'
-                      : dept.programmes.map((p) => `${p.name} (${p._count.batches} batch${p._count.batches === 1 ? '' : 'es'})`).join(' · ')}
+                  <td className="border border-gray-300 px-2 py-1 align-top space-y-1">
+                    <div className="font-medium">{dept.name}</div>
+                    <StructureControls kind="department" id={dept.id} name={dept.name} />
                   </td>
-                  <td className="border border-gray-300 px-2 py-1">
+                  <td className="border border-gray-300 px-2 py-1 align-top">
+                    {dept.programmes.length === 0 ? (
+                      <span className="text-gray-500">—</span>
+                    ) : (
+                      <ul className="space-y-2">
+                        {dept.programmes.map((programme) => (
+                          <li key={programme.id} className="space-y-1">
+                            <div>
+                              <Link href={`/programmes/${programme.id}`} className="text-blue-700 hover:underline">
+                                {programme.name}
+                              </Link>
+                              <span className="text-xs text-gray-500">
+                                {' '}
+                                ({pluralise(programme._count.batches, 'batch', 'batches')})
+                              </span>
+                            </div>
+                            <StructureControls
+                              kind="programme"
+                              id={programme.id}
+                              name={programme.name}
+                              outcomeCount={programme._count.outcomes}
+                            />
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </td>
+                  <td className="border border-gray-300 px-2 py-1 align-top">
                     <form action={createProgrammeAction} className="flex gap-2">
                       <input type="hidden" name="departmentId" value={dept.id} />
                       <input name="name" required placeholder="e.g. B.Sc. Mathematics" className="flex-1 border border-gray-300 rounded px-2 py-1" />

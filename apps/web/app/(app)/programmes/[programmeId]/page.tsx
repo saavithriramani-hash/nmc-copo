@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { createBatchAction } from '@/actions/structure';
 import { OutcomeEditor } from '@/components/OutcomeEditor';
+import { StructureControls } from '@/components/StructureControls';
 import { guard } from '@/lib/authz';
 import { prisma } from '@/lib/db';
 import { requireSession } from '@/lib/session';
@@ -32,9 +33,17 @@ export default async function ProgrammePage({
   return (
     <div className="space-y-6">
       <div className="flex items-baseline justify-between">
-        <div>
+        <div className="space-y-1">
           <h1 className="text-lg font-semibold">{programme.name}</h1>
           <p className="text-xs text-gray-600">{programme.department.name}</p>
+          {user.isAdmin ? (
+            <StructureControls
+              kind="programme"
+              id={programme.id}
+              name={programme.name}
+              outcomeCount={programme.outcomes.length}
+            />
+          ) : null}
         </div>
         <Link href={`/programmes/${programme.id}/consolidation`} className="text-sm text-blue-700 hover:underline">
           Programme consolidation →
@@ -77,6 +86,7 @@ export default async function ProgrammePage({
               <th className="border border-gray-300 px-2 py-1">Batch</th>
               <th className="border border-gray-300 px-2 py-1">Courses</th>
               <th className="border border-gray-300 px-2 py-1">Roster</th>
+              {user.isAdmin ? <th className="border border-gray-300 px-2 py-1 w-56">Manage</th> : null}
             </tr>
           </thead>
           <tbody>
@@ -89,11 +99,16 @@ export default async function ProgrammePage({
                     {batch._count.roster} students
                   </Link>
                 </td>
+                {user.isAdmin ? (
+                  <td className="border border-gray-300 px-2 py-1 align-top">
+                    <StructureControls kind="batch" id={batch.id} name={batch.name} />
+                  </td>
+                ) : null}
               </tr>
             ))}
             {programme.batches.length === 0 ? (
               <tr>
-                <td colSpan={3} className="border border-gray-300 px-2 py-2 text-gray-600">No batches yet.</td>
+                <td colSpan={user.isAdmin ? 4 : 3} className="border border-gray-300 px-2 py-2 text-gray-600">No batches yet.</td>
               </tr>
             ) : null}
           </tbody>

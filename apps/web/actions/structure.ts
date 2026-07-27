@@ -8,6 +8,13 @@ import { prisma } from '@/lib/db';
 import { guard } from '@/lib/authz';
 import { logAudit } from '@/lib/audit';
 import { requireSession } from '@/lib/session';
+import {
+  batchBlockers,
+  blockMessage,
+  departmentBlockers,
+  programmeBlockers,
+  validateStructureName,
+} from '@/lib/structureAdmin';
 
 /** Institution + departments + programmes + batches: FR-1 structure, ADMIN-scoped. */
 
@@ -150,5 +157,226 @@ export async function saveOutcomesAction(
     after: rows.map((r) => ({ code: r.code, kind: r.kind, statement: r.statement })),
   });
   revalidatePath(`/programmes/${programmeId}`);
+  return { ok: true };
+}
+
+/* ── rename and delete (FR-1) ────────────────────────────────────────────
+ *
+ * ADMIN only, like creation. Deletion refuses while anything references
+ * the row and says what; it is never a cascade, so no course, mark,
+ * roster entry, role or locked snapshot is ever removed as a side effect.
+ * `onDelete: Restrict` in the schema enforces the same rule at the
+ * database, which is what makes the check-then-delete race fail safe.
+ */
+
+export type StructureResult = { error?: string; ok?: boolean };
+
+/** A concurrent write slipped a dependant in between the check and the delete. */
+function raceGuard(err: unknown, name: string): StructureResult {
+  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2003') {
+    return { error: `“${name}” now has data depending on it. Reload the page and look again.` };
+  }
+  throw err;
+}
+
+function duplicateName(err: unknown, name: string): StructureResult {
+  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+    return { error: `Another record here is already called “${name}”.` };
+  }
+  throw err;
+}
+
+export async function renameDepartmentAction(departmentId: string, rawName: string): Promise<StructureResult> {
+  const user = await requireSession();
+  await guard.require(user.userId, { type: 'departments.manage' });
+
+  const problem = validateStructureName(rawName);
+  if (problem) return { error: problem };
+  const name = rawName.trim();
+
+  const before = await prisma.department.findUnique({ where: { id: departmentId }, select: { name: true } });
+  if (!before) return { error: 'That department no longer exists.' };
+  if (before.name === name) return { ok: true };
+
+  try {
+    await prisma.department.update({ where: { id: departmentId }, data: { name } });
+  } catch (err) {
+    return duplicateName(err, name);
+  }
+
+  await logAudit({
+    actorId: user.userId,
+    action: 'DEPARTMENT_RENAMED',
+    entityType: 'Department',
+    entityId: departmentId,
+    before: { name: before.name },
+    after: { name },
+  });
+  revalidatePath('/admin/departments');
+  return { ok: true };
+}
+
+export async function renameProgrammeAction(programmeId: string, rawName: string): Promise<StructureResult> {
+  const user = await requireSession();
+  await guard.require(user.userId, { type: 'departments.manage' });
+
+  const problem = validateStructureName(rawName);
+  if (problem) return { error: problem };
+  const name = rawName.trim();
+
+  const before = await prisma.programme.findUnique({ where: { id: programmeId }, select: { name: true } });
+  if (!before) return { error: 'That programme no longer exists.' };
+  if (before.name === name) return { ok: true };
+
+  try {
+    await prisma.programme.update({ where: { id: programmeId }, data: { name } });
+  } catch (err) {
+    return duplicateName(err, name);
+  }
+
+  await logAudit({
+    actorId: user.userId,
+    action: 'PROGRAMME_RENAMED',
+    entityType: 'Programme',
+    entityId: programmeId,
+    before: { name: before.name },
+    after: { name },
+  });
+  revalidatePath('/admin/departments');
+  revalidatePath(`/programmes/${programmeId}`);
+  return { ok: true };
+}
+
+export async function renameBatchAction(batchId: string, rawName: string): Promise<StructureResult> {
+  const user = await requireSession();
+  await guard.require(user.userId, { type: 'departments.manage' });
+
+  const problem = validateStructureName(rawName);
+  if (problem) return { error: problem };
+  const name = rawName.trim();
+
+  const before = await prisma.batch.findUnique({ where: { id: batchId }, select: { name: true, programmeId: true } });
+  if (!before) return { error: 'That batch no longer exists.' };
+  if (before.name === name) return { ok: true };
+
+  try {
+    await prisma.batch.update({ where: { id: batchId }, data: { name } });
+  } catch (err) {
+    return duplicateName(err, name);
+  }
+
+  await logAudit({
+    actorId: user.userId,
+    action: 'BATCH_RENAMED',
+    entityType: 'Batch',
+    entityId: batchId,
+    before: { name: before.name },
+    after: { name },
+  });
+  revalidatePath(`/programmes/${before.programmeId}`);
+  return { ok: true };
+}
+
+export async function deleteDepartmentAction(departmentId: string): Promise<StructureResult> {
+  const user = await requireSession();
+  await guard.require(user.userId, { type: 'departments.manage' });
+
+  const department = await prisma.department.findUnique({
+    where: { id: departmentId },
+    select: { name: true, _count: { select: { programmes: true, roles: true, templates: true } } },
+  });
+  if (!department) return { error: 'That department no longer exists.' };
+
+  const blockers = departmentBlockers({
+    programmes: department._count.programmes,
+    roles: department._count.roles,
+    templates: department._count.templates,
+  });
+  if (blockers.length > 0) return { error: blockMessage(department.name, blockers) };
+
+  try {
+    await prisma.department.delete({ where: { id: departmentId } });
+  } catch (err) {
+    return raceGuard(err, department.name);
+  }
+
+  await logAudit({
+    actorId: user.userId,
+    action: 'DEPARTMENT_DELETED',
+    entityType: 'Department',
+    entityId: departmentId,
+    before: { name: department.name },
+  });
+  revalidatePath('/admin/departments');
+  return { ok: true };
+}
+
+export async function deleteProgrammeAction(programmeId: string): Promise<StructureResult> {
+  const user = await requireSession();
+  await guard.require(user.userId, { type: 'departments.manage' });
+
+  const programme = await prisma.programme.findUnique({
+    where: { id: programmeId },
+    select: {
+      name: true,
+      outcomes: { select: { code: true, kind: true, statement: true } },
+      _count: { select: { batches: true, roles: true } },
+    },
+  });
+  if (!programme) return { error: 'That programme no longer exists.' };
+
+  const blockers = programmeBlockers({ batches: programme._count.batches, roles: programme._count.roles });
+  if (blockers.length > 0) return { error: blockMessage(programme.name, blockers) };
+
+  // The programme's own PO/PSO definitions go with it: they are owned by
+  // it, and with no batches there are no courses, so no articulation
+  // matrix can cite them. Recorded in full in the audit entry below.
+  try {
+    await prisma.$transaction([
+      prisma.programmeOutcome.deleteMany({ where: { programmeId } }),
+      prisma.programme.delete({ where: { id: programmeId } }),
+    ]);
+  } catch (err) {
+    return raceGuard(err, programme.name);
+  }
+
+  await logAudit({
+    actorId: user.userId,
+    action: 'PROGRAMME_DELETED',
+    entityType: 'Programme',
+    entityId: programmeId,
+    before: { name: programme.name, outcomes: programme.outcomes },
+  });
+  revalidatePath('/admin/departments');
+  return { ok: true };
+}
+
+export async function deleteBatchAction(batchId: string): Promise<StructureResult> {
+  const user = await requireSession();
+  await guard.require(user.userId, { type: 'departments.manage' });
+
+  const batch = await prisma.batch.findUnique({
+    where: { id: batchId },
+    select: { name: true, programmeId: true, _count: { select: { courses: true, roster: true } } },
+  });
+  if (!batch) return { error: 'That batch no longer exists.' };
+
+  const blockers = batchBlockers({ courses: batch._count.courses, roster: batch._count.roster });
+  if (blockers.length > 0) return { error: blockMessage(batch.name, blockers) };
+
+  try {
+    await prisma.batch.delete({ where: { id: batchId } });
+  } catch (err) {
+    return raceGuard(err, batch.name);
+  }
+
+  await logAudit({
+    actorId: user.userId,
+    action: 'BATCH_DELETED',
+    entityType: 'Batch',
+    entityId: batchId,
+    before: { name: batch.name },
+  });
+  revalidatePath(`/programmes/${batch.programmeId}`);
   return { ok: true };
 }
