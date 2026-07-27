@@ -104,7 +104,7 @@ export function buildCourseInput(course: CourseForInput, markRows: readonly Mark
   );
 
   // COs, in display order. Engine ids are the database ids.
-  const cos = course.cos.map((co) => ({ id: co.id, statement: co.statement, bloomLevel: co.bloomLevel }));
+  const cos = course.cos.map((co) => ({ id: co.id, statement: co.statement, bloomLevels: co.bloomLevels }));
 
   // Articulation matrix: every PO/PSO of the programme appears as a column
   // in every CO row; a missing ArticulationMatrix cell is null (unmapped),

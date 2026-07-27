@@ -76,7 +76,7 @@ export async function cloneCourseSetupAction(targetCourseId: string, formData: F
           courseId: targetCourseId,
           code: co.code,
           statement: co.statement,
-          bloomLevel: co.bloomLevel,
+          bloomLevels: co.bloomLevels,
           displayOrder: co.displayOrder,
         },
       });

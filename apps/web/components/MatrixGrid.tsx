@@ -54,7 +54,7 @@ export function MatrixGrid({
       for (const po of pos) row[po.id] = cells.get(`${co.id}|${po.id}`) ?? null;
       matrix[co.id] = row;
     }
-    const engineCos = cos.map((co) => ({ id: co.id, statement: co.statement, bloomLevel: '' }));
+    const engineCos = cos.map((co) => ({ id: co.id, statement: co.statement, bloomLevels: [] }));
     const { result } = step1ArticulationWeightages(engineCos, matrix);
     return new Map(result.perPo.map((po) => [po.poId, po.weightage]));
   }, [cells, cos, pos]);

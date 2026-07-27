@@ -159,11 +159,11 @@ async function main(): Promise<void> {
   await prisma.courseInstructor.create({ data: { courseId: 'course-mat301', userId: 'user-fac-1' } });
 
   const coDefs = [
-    { id: 'co1', code: 'CO1', statement: 'Recall the completeness property of the real line', bloomLevel: 'Remember' },
-    { id: 'co2', code: 'CO2', statement: 'Explain convergence of sequences and series', bloomLevel: 'Understand' },
-    { id: 'co3', code: 'CO3', statement: 'Apply convergence tests to concrete series', bloomLevel: 'Apply' },
-    { id: 'co4', code: 'CO4', statement: 'Analyse continuity and uniform continuity', bloomLevel: 'Analyse' },
-    { id: 'co5', code: 'CO5', statement: 'Construct rigorous epsilon-delta proofs', bloomLevel: 'Create' },
+    { id: 'co1', code: 'CO1', statement: 'Recall the completeness property of the real line', bloomLevels: ['Remember'] },
+    { id: 'co2', code: 'CO2', statement: 'Explain convergence of sequences and series', bloomLevels: ['Understand'] },
+    { id: 'co3', code: 'CO3', statement: 'Apply convergence tests to concrete series', bloomLevels: ['Apply'] },
+    { id: 'co4', code: 'CO4', statement: 'Analyse continuity and uniform continuity', bloomLevels: ['Analyse'] },
+    { id: 'co5', code: 'CO5', statement: 'Construct rigorous epsilon-delta proofs', bloomLevels: ['Create'] },
   ];
   await prisma.courseOutcome.createMany({
     data: coDefs.map((co, i) => ({ ...co, courseId: 'course-mat301', displayOrder: i + 1 })),

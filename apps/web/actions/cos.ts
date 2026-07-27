@@ -5,14 +5,15 @@ import { Prisma } from '@copo/db';
 import { prisma } from '@/lib/db';
 import { guard } from '@/lib/authz';
 import { logAudit } from '@/lib/audit';
-import { BLOOM_LEVELS } from '@/lib/bloom';
+import { normaliseBloomLevels, validateBloomLevels } from '@/lib/bloom';
 import { requireSession } from '@/lib/session';
 
 export interface CoRow {
   id: string | null;
   code: string;
   statement: string;
-  bloomLevel: string;
+  /** One or more Bloom levels; stored in taxonomy order (FR-5, extended). */
+  bloomLevels: string[];
 }
 
 /** Replace-all save of a course's CO list (FR-5). */
@@ -22,9 +23,8 @@ export async function saveCosAction(courseId: string, rows: CoRow[]): Promise<{ 
 
   for (const row of rows) {
     if (!row.code.trim() || !row.statement.trim()) return { error: 'Every CO needs a code and a statement.' };
-    if (!BLOOM_LEVELS.includes(row.bloomLevel as (typeof BLOOM_LEVELS)[number])) {
-      return { error: `Unknown Bloom level '${row.bloomLevel}'.` };
-    }
+    const problem = validateBloomLevels(row.bloomLevels);
+    if (problem) return { error: `${row.code.trim() || 'A CO'}: ${problem}` };
   }
   const codes = rows.map((r) => r.code.trim());
   if (new Set(codes).size !== codes.length) return { error: 'CO codes must be unique.' };
@@ -44,10 +44,11 @@ export async function saveCosAction(courseId: string, rows: CoRow[]): Promise<{ 
         await tx.courseOutcome.delete({ where: { id: co.id } });
       }
       for (const [index, row] of rows.entries()) {
+        const bloomLevels = normaliseBloomLevels(row.bloomLevels);
         if (row.id) {
           await tx.courseOutcome.update({
             where: { id: row.id },
-            data: { code: row.code.trim(), statement: row.statement.trim(), bloomLevel: row.bloomLevel, displayOrder: index + 1 },
+            data: { code: row.code.trim(), statement: row.statement.trim(), bloomLevels, displayOrder: index + 1 },
           });
         } else {
           await tx.courseOutcome.create({
@@ -55,7 +56,7 @@ export async function saveCosAction(courseId: string, rows: CoRow[]): Promise<{ 
               courseId,
               code: row.code.trim(),
               statement: row.statement.trim(),
-              bloomLevel: row.bloomLevel,
+              bloomLevels,
               displayOrder: index + 1,
             },
           });
@@ -74,8 +75,8 @@ export async function saveCosAction(courseId: string, rows: CoRow[]): Promise<{ 
     action: 'COS_SAVED',
     entityType: 'Course',
     entityId: courseId,
-    before: existing.map((c) => ({ code: c.code, statement: c.statement, bloomLevel: c.bloomLevel })),
-    after: rows.map((r) => ({ code: r.code, statement: r.statement, bloomLevel: r.bloomLevel })),
+    before: existing.map((c) => ({ code: c.code, statement: c.statement, bloomLevels: c.bloomLevels })),
+    after: rows.map((r) => ({ code: r.code, statement: r.statement, bloomLevels: normaliseBloomLevels(r.bloomLevels) })),
   });
   revalidatePath(`/courses/${courseId}`, 'layout');
   return { ok: true };

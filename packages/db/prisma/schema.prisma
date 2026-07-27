@@ -271,9 +271,12 @@ model CourseOutcome {
   id           String @id @default(cuid())
   courseId     String
   course       Course @relation(fields: [courseId], references: [id], onDelete: Restrict)
-  code         String // "CO1"
-  statement    String
-  bloomLevel   String
+  code      String // "CO1"
+  statement String
+  /// One or more Bloom's taxonomy levels; a single outcome commonly spans
+  /// two adjacent levels. Display-only — the engine does not interpret
+  /// them. Stored in taxonomy order, deduplicated, never empty (CHECK).
+  bloomLevels  String[]
   displayOrder Int
 
   matrixEntries ArticulationMatrix[]

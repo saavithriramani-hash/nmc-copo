@@ -19,8 +19,11 @@ export type MappingStrength = 1 | 2 | 3;
 export interface CO {
   id: string;
   statement: string;
-  /** Bloom's taxonomy level, display-only; the engine does not use it. */
-  bloomLevel: string;
+  /**
+   * Bloom's taxonomy levels, display-only; the engine does not use them.
+   * One or more — a single outcome commonly spans two adjacent levels.
+   */
+  bloomLevels: string[];
 }
 
 /**

@@ -31,7 +31,7 @@ course-setup cloning.
 | `/programmes/[id]` | Coordinator edits PO/PSOs; admin adds batches |
 | `/courses/new` | HoD creates a course (`course.create`, server-derived department) |
 | `/courses/[id]` | Details (faculty, while DRAFT) + assigned faculty. **Staffing is `course.staff` — HoD only**: faculty see the roster read-only. Assigning an account without the Faculty role is refused (it would grant nothing), and the last instructor cannot be removed |
-| `…/outcomes` | CO editor (code, statement, Bloom level, reorder) |
+| `…/outcomes` | CO editor (code, statement, Bloom levels, reorder). A CO carries **one or more** Bloom levels (checkboxes), stored deduplicated in taxonomy order; at least one is required (CHECK-enforced). Display-only — no attainment figure depends on them. Note FR-5 says "Bloom's level" singular: this is a deliberate change against that baseline |
 | `…/matrix` | COs down, POs/PSOs across, cells 1/2/3/blank. **Weightages recompute live under each column via the engine's own `step1ArticulationWeightages`** — what faculty see while typing is what the report computes |
 | `…/assessments` | List + add (any shape/rule/group) + **adopt template** + **clone setup** + save-as-template (HoD) |
 | `…/assessments/[id]` | Structure editor: unlimited user-named sections (with an "answer any n of m" rule), item tables with per-item CO tags, single-score CO tag checkboxes |

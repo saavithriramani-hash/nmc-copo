@@ -79,7 +79,7 @@ function fixtureCourse(overrides: CourseOverrides = {}): CourseForInput {
         courseId: 'course-1',
         code: 'CO1',
         statement: 'Statement one',
-        bloomLevel: 'Understand',
+        bloomLevels: ['Understand'],
         displayOrder: 1,
         matrixEntries: [
           { coId: 'co1', poId: 'po1', strength: 3 },
@@ -92,7 +92,7 @@ function fixtureCourse(overrides: CourseOverrides = {}): CourseForInput {
         courseId: 'course-1',
         code: 'CO2',
         statement: 'Statement two',
-        bloomLevel: 'Apply',
+        bloomLevels: ['Apply'],
         displayOrder: 2,
         matrixEntries: [{ coId: 'co2', poId: 'po1', strength: 2 }],
         indirect: null, // no feedback row: must reach the engine as "absent"
@@ -179,8 +179,8 @@ describe('buildCourseInput — structure mapping', () => {
 
   it('maps COs in display order with statements and Bloom levels', () => {
     expect(input.cos).toEqual([
-      { id: 'co1', statement: 'Statement one', bloomLevel: 'Understand' },
-      { id: 'co2', statement: 'Statement two', bloomLevel: 'Apply' },
+      { id: 'co1', statement: 'Statement one', bloomLevels: ['Understand'] },
+      { id: 'co2', statement: 'Statement two', bloomLevels: ['Apply'] },
     ]);
   });
 

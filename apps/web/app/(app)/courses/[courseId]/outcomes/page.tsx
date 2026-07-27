@@ -16,7 +16,7 @@ export default async function CourseOutcomesPage({ params }: { params: Promise<{
       <CoEditor
         courseId={courseId}
         canEdit={canEdit}
-        initial={cos.map((co) => ({ id: co.id, code: co.code, statement: co.statement, bloomLevel: co.bloomLevel }))}
+        initial={cos.map((co) => ({ id: co.id, code: co.code, statement: co.statement, bloomLevels: co.bloomLevels }))}
       />
     </div>
   );

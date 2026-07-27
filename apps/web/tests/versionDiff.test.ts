@@ -6,7 +6,7 @@ import { countMarkCells, diffSnapshots, warningsFingerprint, type SnapshotForDif
 /** A tiny computable course; s4Mark varies to change the outcome. */
 function course(s4Mark: number | null): CourseInput {
   return {
-    cos: [{ id: 'co1', statement: 'S', bloomLevel: 'Apply' }],
+    cos: [{ id: 'co1', statement: 'S', bloomLevels: ['Apply'] }],
     poMatrix: { co1: { po1: 3 } },
     parameters: { ...DEFAULT_PARAMETERS, weightGroups: { only: 1 } },
     assessments: [

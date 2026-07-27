@@ -36,5 +36,5 @@ export function makeParams(overrides: Partial<Parameters> = {}): Parameters {
 }
 
 export function makeCo(id: string): CO {
-  return { id, statement: `Statement for ${id}`, bloomLevel: 'Apply' };
+  return { id, statement: `Statement for ${id}`, bloomLevels: ['Apply'] };
 }

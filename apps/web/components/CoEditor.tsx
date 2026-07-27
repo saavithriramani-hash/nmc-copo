@@ -2,11 +2,16 @@
 
 import { useState, useTransition } from 'react';
 import { saveCosAction, type CoRow } from '@/actions/cos';
-import { BLOOM_LEVELS } from '@/lib/bloom';
+import { BLOOM_LEVELS, formatBloomLevels, normaliseBloomLevels } from '@/lib/bloom';
 
 /**
- * CO editor (FR-5): dense rows — code, statement, Bloom level. Enter in
- * the last statement adds the next CO with an auto code. Explicit save.
+ * CO editor (FR-5, extended): dense rows — code, statement, Bloom
+ * levels. Enter in the last statement adds the next CO with an auto
+ * code. Explicit save.
+ *
+ * A CO may carry several levels, so the levels are checkboxes rather
+ * than a dropdown: every option stays visible and reachable by keyboard,
+ * with no menu to open per row.
  */
 export function CoEditor({ courseId, initial, canEdit }: { courseId: string; initial: CoRow[]; canEdit: boolean }) {
   const [rows, setRows] = useState<CoRow[]>(initial);
@@ -21,8 +26,21 @@ export function CoEditor({ courseId, initial, canEdit }: { courseId: string; ini
   };
 
   const addRow = () => {
-    setRows((current) => [...current, { id: null, code: `CO${current.length + 1}`, statement: '', bloomLevel: 'Understand' }]);
+    setRows((current) => [...current, { id: null, code: `CO${current.length + 1}`, statement: '', bloomLevels: ['Understand'] }]);
     setDirty(true);
+  };
+
+  const toggleLevel = (index: number, level: string) => {
+    setRows((current) =>
+      current.map((row, i) => {
+        if (i !== index) return row;
+        const has = row.bloomLevels.includes(level);
+        const next = has ? row.bloomLevels.filter((l) => l !== level) : [...row.bloomLevels, level];
+        return { ...row, bloomLevels: normaliseBloomLevels(next) };
+      }),
+    );
+    setDirty(true);
+    setMessage(null);
   };
 
   const removeRow = (index: number) => {
@@ -57,7 +75,7 @@ export function CoEditor({ courseId, initial, canEdit }: { courseId: string; ini
             <tr key={row.id ?? i}>
               <td className="border border-gray-300 px-2 py-1 w-20 font-medium">{row.code}</td>
               <td className="border border-gray-300 px-2 py-1">{row.statement}</td>
-              <td className="border border-gray-300 px-2 py-1 w-28">{row.bloomLevel}</td>
+              <td className="border border-gray-300 px-2 py-1 w-40">{formatBloomLevels(row.bloomLevels)}</td>
             </tr>
           ))}
           {rows.length === 0 ? (
@@ -75,7 +93,7 @@ export function CoEditor({ courseId, initial, canEdit }: { courseId: string; ini
           <tr className="bg-gray-100 text-left">
             <th className="border border-gray-300 px-2 py-1 w-20">Code</th>
             <th className="border border-gray-300 px-2 py-1">Statement</th>
-            <th className="border border-gray-300 px-2 py-1 w-32">Bloom level</th>
+            <th className="border border-gray-300 px-2 py-1 w-64">Bloom levels</th>
             <th className="border border-gray-300 px-2 py-1 w-28">Order</th>
             <th className="border border-gray-300 px-2 py-1 w-16"></th>
           </tr>
@@ -101,11 +119,22 @@ export function CoEditor({ courseId, initial, canEdit }: { courseId: string; ini
                 />
               </td>
               <td className="border border-gray-300 px-1 py-0.5">
-                <select value={row.bloomLevel} onChange={(e) => update(index, { bloomLevel: e.target.value })} className="w-full border-0 py-1">
+                <fieldset className="flex flex-wrap gap-x-2 gap-y-0.5">
+                  <legend className="sr-only">Bloom levels for {row.code}</legend>
                   {BLOOM_LEVELS.map((level) => (
-                    <option key={level} value={level}>{level}</option>
+                    <label key={level} className="inline-flex items-center gap-1 text-xs whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={row.bloomLevels.includes(level)}
+                        onChange={() => toggleLevel(index, level)}
+                      />
+                      {level}
+                    </label>
                   ))}
-                </select>
+                </fieldset>
+                {row.bloomLevels.length === 0 ? (
+                  <p className="text-xs text-red-700">Choose at least one.</p>
+                ) : null}
               </td>
               <td className="border border-gray-300 px-1 py-0.5 text-center whitespace-nowrap">
                 <button type="button" onClick={() => move(index, -1)} disabled={index === 0} className="px-1 disabled:opacity-30" aria-label="move up">↑</button>
