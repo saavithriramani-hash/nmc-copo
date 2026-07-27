@@ -50,8 +50,8 @@ Depends on `@copo/db`; nothing else depends on how identity works.
 
 | Role | Scope enforced |
 |---|---|
-| Faculty | Own courses only (instructor rows); edits only while DRAFT |
-| HoD | Every course in their department; lock/unlock; course-level parameter overrides |
+| Faculty | Own courses only (instructor rows); edits only while DRAFT. **Not who teaches the course** |
+| HoD | Every course in their department; lock/unlock; course-level parameter overrides; **staffing (`course.staff`)** |
 | Programme coordinator | Their programme: PO/PSOs, programme parameters, articulation matrices, programme attainment. No raw marks |
 | IQAC | Read-all (courses, programmes, departments, institution) + institution defaults + audit log. No raw marks |
 | Principal/Dean | Read-only consolidations/dashboards. No course detail, no marks |
@@ -74,6 +74,14 @@ changing any of them is now a change request against this baseline.
    LOCKED freezes everyone (unlock creates a new version).
 5. **Parameter overrides**: institution → IQAC; programme → its
    coordinator; course (minuted exception) → the HoD.
+6. **Staffing is departmental, not the course's own** (`course.staff`,
+   HoD only). FR-4 makes assigned faculty part of *creating* a course and
+   `course.create` is HoD-only; §2 gives Faculty setup, mark entry,
+   compute, export and submit — not staffing. This was originally folded
+   into `course.write`, which let an instructor grant any faculty member
+   in the college read/write access to that course's per-student marks
+   (defeating NFR-10), remove a colleague the HoD had posted, or strand
+   the course by removing themselves.
 
 ## Tests (61, no database needed)
 

@@ -50,6 +50,7 @@ export function decide(actor: ActorContext, action: Action, resource: ResourceCo
     // ── course-scoped ────────────────────────────────────────────────
     case 'course.read':
     case 'course.write':
+    case 'course.staff':
     case 'matrix.write':
     case 'marks.read':
     case 'marks.write':
@@ -156,6 +157,22 @@ function decideCourse(
       if (own) return deny('WRONG_STATUS');
       if (hod) return allow('HOD');
       return deny('OUT_OF_SCOPE');
+    }
+
+    case 'course.staff': {
+      // WHO TEACHES the course is a departmental decision, not the
+      // course's own. FR-4 makes assigned faculty part of creating a
+      // course, and course.create is HoD-only; §2 gives Faculty course
+      // setup, mark entry, compute, export and submit — not staffing.
+      //
+      // Deliberately NOT course.write: an instructor who could edit the
+      // instructor list could grant any faculty member in the college
+      // read/write access to this course's per-student marks, defeating
+      // NFR-10 (marks are for the course faculty and their department
+      // chain only). They could also remove a colleague the HoD posted,
+      // or strand the course by removing themselves.
+      if (course.status === 'LOCKED') return deny('COURSE_LOCKED');
+      return hod ? allow('HOD') : deny('OUT_OF_SCOPE');
     }
 
     case 'matrix.write': {

@@ -44,6 +44,20 @@ describe('policy — faculty scope: own courses only (§2)', () => {
     expect(marks).toEqual({ allow: false, reason: 'OUT_OF_SCOPE' });
   });
 
+  it('cannot change who teaches their own course (FR-4 staffing is the HoD’s)', () => {
+    // Regression: staffing once rode on course.write, which let an
+    // instructor grant any faculty member in the college read/write
+    // access to this course's per-student marks (NFR-10), remove a
+    // colleague the HoD had posted, or strand the course by removing
+    // themselves.
+    expect(decide(facultyMath1, courseAction('course.staff', 'c-math-1'), C_MATH_1)).toEqual({
+      allow: false,
+      reason: 'OUT_OF_SCOPE',
+    });
+    // …while ordinary setup on the same DRAFT course stays allowed.
+    expect(decide(facultyMath1, courseAction('course.write', 'c-math-1'), C_MATH_1).allow).toBe(true);
+  });
+
   it('never locks or unlocks, even their own course', () => {
     const submitted = course({ status: 'SUBMITTED' });
     const locked = course({ status: 'LOCKED' });
@@ -102,6 +116,23 @@ describe('policy — HoD scope: all courses in their department (§2)', () => {
     for (const type of COURSE_ACTION_TYPES) {
       expect(decide(hodMath, courseAction(type, 'c-phys-1'), C_PHYS_1).allow, type).toBe(false);
     }
+  });
+
+  it('assigns and removes faculty on any department course, but never on a LOCKED one', () => {
+    expect(decide(hodMath, courseAction('course.staff', 'c-math-2'), C_MATH_2).allow).toBe(true);
+    expect(decide(hodMath, courseAction('course.staff', 'c-math-1'), course({ status: 'SUBMITTED' })).allow).toBe(true);
+    expect(decide(hodMath, courseAction('course.staff', 'c-math-1'), course({ status: 'LOCKED' }))).toEqual({
+      allow: false,
+      reason: 'COURSE_LOCKED',
+    });
+    expect(decide(hodMath, courseAction('course.staff', 'c-phys-1'), C_PHYS_1).allow).toBe(false);
+  });
+
+  it('is the ONLY role that may staff a course', () => {
+    for (const who of [facultyMath1, coordMath, iqac, principal, admin]) {
+      expect(decide(who, courseAction('course.staff', 'c-math-1'), C_MATH_1).allow).toBe(false);
+    }
+    expect(decide(hodMath, courseAction('course.staff', 'c-math-1'), C_MATH_1).allow).toBe(true);
   });
 
   it('reads own department and its programmes; not the neighbour’s', () => {

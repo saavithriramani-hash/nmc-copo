@@ -19,6 +19,8 @@ export default async function CourseDetailsPage({
     include: { instructors: { include: { user: { select: { id: true, fullName: true, email: true } } } } },
   });
   const canWrite = (await guard.check(user.userId, { type: 'course.write', courseId })).allow;
+  // Staffing is a separate authority (FR-4): the HoD decides who teaches.
+  const canStaff = (await guard.check(user.userId, { type: 'course.staff', courseId })).allow;
 
   const updateAction = updateCourseDetailsAction.bind(null, courseId);
   const addAction = addInstructorAction.bind(null, courseId);
@@ -64,7 +66,7 @@ export default async function CourseDetailsPage({
                 <td className="border border-gray-300 px-2 py-1">{instructor.user.fullName}</td>
                 <td className="border border-gray-300 px-2 py-1">{instructor.user.email}</td>
                 <td className="border border-gray-300 px-2 py-1 w-24 text-center">
-                  {canWrite ? (
+                  {canStaff ? (
                     <form action={removeInstructorAction.bind(null, courseId, instructor.userId)}>
                       <button type="submit" className="text-red-700 hover:underline">remove</button>
                     </form>
@@ -79,12 +81,16 @@ export default async function CourseDetailsPage({
             ) : null}
           </tbody>
         </table>
-        {canWrite ? (
+        {canStaff ? (
           <form action={addAction} className="flex gap-2 max-w-md">
             <input name="email" type="email" required placeholder="faculty email address" className="flex-1 border border-gray-300 rounded px-2 py-1" />
             <button type="submit" className="border border-gray-300 rounded px-2 py-1 hover:bg-gray-100">Add faculty</button>
           </form>
-        ) : null}
+        ) : (
+          <p className="text-xs text-gray-500">
+            Who teaches this course is set by the Head of Department (FR-4).
+          </p>
+        )}
       </section>
     </div>
   );

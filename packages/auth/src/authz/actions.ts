@@ -10,6 +10,7 @@
 export type CourseActionType =
   | 'course.read' // setup + computed results + exports
   | 'course.write' // course setup: COs, assessments, indirect feedback
+  | 'course.staff' // who teaches the course (FR-4 staffing — HoD, never the faculty themselves)
   | 'matrix.write' // CO↔PO articulation matrix (§2: coordinator capability too)
   | 'marks.read' // per-student raw marks (NFR-10: faculty + department chain only)
   | 'marks.write' // mark entry / import
@@ -50,6 +51,7 @@ export type Action =
 export const COURSE_ACTION_TYPES: readonly CourseActionType[] = [
   'course.read',
   'course.write',
+  'course.staff',
   'matrix.write',
   'marks.read',
   'marks.write',
