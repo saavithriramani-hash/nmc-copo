@@ -12,6 +12,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     { href: '/institution', label: 'Institution', show: isIqacOrPrincipal },
     { href: '/templates', label: 'Assessment templates', show: user.hodDepartmentIds.length > 0 },
     { href: '/admin/departments', label: 'Departments', show: user.isAdmin },
+    { href: '/admin/users', label: 'Accounts & roles', show: user.isAdmin },
     { href: '/audit', label: 'Audit log', show: user.isAdmin || user.roles.some((role) => role.kind === 'IQAC') },
   ];
 
