@@ -1,9 +1,6 @@
 -- CreateEnum
 CREATE TYPE "JobStatus" AS ENUM ('PENDING', 'RUNNING', 'COMPLETED', 'FAILED');
 
--- AlterTable
-ALTER TABLE "Section" ADD COLUMN     "optionalAnswerCount" INTEGER;
-
 -- CreateTable
 CREATE TABLE "Job" (
     "id" TEXT NOT NULL,
