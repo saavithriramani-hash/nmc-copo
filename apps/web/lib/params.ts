@@ -10,6 +10,21 @@ import { prisma } from './db';
  * builder for the weight-group list.
  */
 export async function resolveCourseParameters(courseId: string): Promise<Step2Result> {
+  return (await resolveCourseParameterLayers(courseId)).resolved;
+}
+
+export interface CourseParameterLayers {
+  /** What applies now, with provenance. */
+  resolved: Step2Result;
+  /** What would apply if the course's own overrides were removed. */
+  inherited: Step2Result;
+}
+
+/**
+ * Both resolutions in one query, for screens that must show a course
+ * override *and* what removing it would restore.
+ */
+export async function resolveCourseParameterLayers(courseId: string): Promise<CourseParameterLayers> {
   const course = await prisma.course.findUniqueOrThrow({
     where: { id: courseId },
     include: {
@@ -19,9 +34,11 @@ export async function resolveCourseParameters(courseId: string): Promise<Step2Re
     },
   });
   const programme = course.batch.programme;
-  return step2ResolveParameters(
-    institutionParameters(programme.department.institution),
-    parameterOverrides(programme),
-    parameterOverrides(course),
-  );
+  const institution = institutionParameters(programme.department.institution);
+  const programmeOverrides = parameterOverrides(programme);
+
+  return {
+    resolved: step2ResolveParameters(institution, programmeOverrides, parameterOverrides(course)),
+    inherited: step2ResolveParameters(institution, programmeOverrides),
+  };
 }

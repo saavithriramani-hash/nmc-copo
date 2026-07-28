@@ -1,9 +1,8 @@
 import { notFound } from 'next/navigation';
-import { institutionParameters, parameterOverrides } from '@copo/db';
-import { step2ResolveParameters } from '@copo/engine';
 import { ThresholdEditor } from '@/components/ThresholdEditor';
 import { guard } from '@/lib/authz';
 import { prisma } from '@/lib/db';
+import { resolveCourseParameterLayers } from '@/lib/params';
 import { requireSession } from '@/lib/session';
 import { describeSource, formatThresholdPercent, thresholdExample } from '@/lib/courseThreshold';
 
@@ -24,22 +23,13 @@ export default async function CourseSettingsPage({ params }: { params: Promise<{
 
   const course = await prisma.course.findUnique({
     where: { id: courseId },
-    include: {
-      batch: { include: { programme: { include: { department: { include: { institution: true } } } } } },
-    },
+    select: { status: true, thresholdFraction: true },
   });
   if (!course) notFound();
 
-  const programme = course.batch.programme;
-  const institution = programme.department.institution;
-
-  const resolved = step2ResolveParameters(
-    institutionParameters(institution),
-    parameterOverrides(programme),
-    parameterOverrides(course),
-  );
-  // What the course would fall back to if the override were removed.
-  const inherited = step2ResolveParameters(institutionParameters(institution), parameterOverrides(programme));
+  // Both resolutions come from the engine's own Step 2 (lib/params), so
+  // the value shown is by construction the value computed with.
+  const { resolved, inherited } = await resolveCourseParameterLayers(courseId);
 
   const canEdit = (await guard.check(user.userId, { type: 'settings.course.write', courseId })).allow;
   const override = course.thresholdFraction === null ? null : Number(course.thresholdFraction);

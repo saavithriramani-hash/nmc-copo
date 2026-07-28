@@ -4,6 +4,7 @@ import { adoptTemplateAction, saveTemplateFromCourseAction } from '@/actions/tem
 import { cloneCourseSetupAction } from '@/actions/clone';
 import { guard } from '@/lib/authz';
 import { prisma } from '@/lib/db';
+import { formatThresholdPercent } from '@/lib/courseThreshold';
 import { resolveCourseParameters } from '@/lib/params';
 import { requireSession } from '@/lib/session';
 
@@ -172,7 +173,9 @@ export default async function AssessmentsPage({
             <label className="block">
               <span className="block text-xs font-medium text-gray-700 mb-1">Scoring rule</span>
               <select name="scoringRule" className="border border-gray-300 rounded px-2 py-1.5">
-                <option value="RUBRIC">Rubric (70% threshold → bands)</option>
+                {/* The threshold is a resolved parameter, not a constant:
+                    the HoD may override it per course (§4.1). */}
+                <option value="RUBRIC">Rubric ({formatThresholdPercent(parameters.thresholdFraction)}% threshold → bands)</option>
                 <option value="COHORT_BAND">Cohort band (end-semester)</option>
               </select>
             </label>

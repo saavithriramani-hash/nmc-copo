@@ -53,6 +53,7 @@ export default async function AssessmentEditorPage({
         canEdit={canEdit}
         cos={cos}
         weightGroups={Object.keys(parameters.weightGroups)}
+        thresholdFraction={parameters.thresholdFraction}
         initial={{
           name: assessment.name,
           weightGroup: assessment.weightGroup,

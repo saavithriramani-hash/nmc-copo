@@ -7,6 +7,7 @@ import {
   type StructurePayload,
   type StructureSectionInput,
 } from '@/actions/assessment';
+import { formatThresholdPercent } from '@/lib/courseThreshold';
 
 interface CoOption {
   id: string;
@@ -19,6 +20,9 @@ interface Props {
   canEdit: boolean;
   cos: CoOption[];
   weightGroups: string[];
+  /** Resolved for THIS course (§4.1) — the HoD may override it, so it is
+   *  never assumed to be the institution default. */
+  thresholdFraction: number;
   initial: {
     name: string;
     weightGroup: string;
@@ -36,7 +40,7 @@ interface Props {
  * flat item table; SINGLE_SCORE a maximum plus CO tags. Enter in the last
  * row adds another; explicit Save writes the whole structure atomically.
  */
-export function StructureEditor({ assessmentId, shape, canEdit, cos, weightGroups, initial }: Props) {
+export function StructureEditor({ assessmentId, shape, canEdit, cos, weightGroups, thresholdFraction, initial }: Props) {
   const [name, setName] = useState(initial.name);
   const [weightGroup, setWeightGroup] = useState(initial.weightGroup);
   const [scoringRule, setScoringRule] = useState(initial.scoringRule);
@@ -201,7 +205,7 @@ export function StructureEditor({ assessmentId, shape, canEdit, cos, weightGroup
             <label className="block">
               <span className="block text-xs font-medium text-gray-700 mb-1">Scoring rule</span>
               <select value={scoringRule} onChange={(e) => { setScoringRule(e.target.value as 'RUBRIC' | 'COHORT_BAND'); touch(); }} className="border border-gray-300 rounded px-2 py-1.5">
-                <option value="RUBRIC">Rubric</option>
+                <option value="RUBRIC">Rubric ({formatThresholdPercent(thresholdFraction)}% threshold)</option>
                 <option value="COHORT_BAND">Cohort band (end-semester)</option>
               </select>
             </label>
@@ -211,7 +215,9 @@ export function StructureEditor({ assessmentId, shape, canEdit, cos, weightGroup
             </label>
           </>
         ) : (
-          <p className="text-xs text-gray-500 self-center">Scoring: rubric (70% threshold → attainment bands).</p>
+          <p className="text-xs text-gray-500 self-center">
+            Scoring: rubric ({formatThresholdPercent(thresholdFraction)}% threshold → attainment bands).
+          </p>
         )}
       </div>
 
