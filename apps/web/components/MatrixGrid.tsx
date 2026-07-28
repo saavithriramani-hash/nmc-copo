@@ -4,6 +4,7 @@ import { useMemo, useRef, useState, useTransition } from 'react';
 import { step1ArticulationWeightages } from '@copo/engine';
 import type { PoMatrix } from '@copo/engine';
 import { saveMatrixAction, type MatrixCellInput } from '@/actions/matrix';
+import { orderOutcomes } from '@/lib/matrixOrder';
 
 export interface MatrixCo {
   id: string;
@@ -47,17 +48,29 @@ export function MatrixGrid({
   const [pending, startTransition] = useTransition();
   const inputRefs = useRef(new Map<string, HTMLInputElement>());
 
+  /**
+   * THE column order, computed once and used for rendering, for the key
+   * handler and for focus movement alike.
+   *
+   * Columns are grouped POs-then-PSOs, which is NOT the `displayOrder`
+   * the prop arrives in — a programme may legitimately number a PO after
+   * a PSO. Indexing the unordered prop by a rendered column index
+   * therefore addressed a different outcome: typing a strength into the
+   * PO6 cell wrote it to PSO1. Nothing below may index `pos` by column.
+   */
+  const ordered = useMemo(() => orderOutcomes(pos), [pos]);
+
   const weightages = useMemo(() => {
     const matrix: PoMatrix = {};
     for (const co of cos) {
       const row: Record<string, 1 | 2 | 3 | null> = {};
-      for (const po of pos) row[po.id] = cells.get(`${co.id}|${po.id}`) ?? null;
+      for (const po of ordered) row[po.id] = cells.get(`${co.id}|${po.id}`) ?? null;
       matrix[co.id] = row;
     }
     const engineCos = cos.map((co) => ({ id: co.id, statement: co.statement, bloomLevels: [] }));
     const { result } = step1ArticulationWeightages(engineCos, matrix);
     return new Map(result.perPo.map((po) => [po.poId, po.weightage]));
-  }, [cells, cos, pos]);
+  }, [cells, cos, ordered]);
 
   const setCell = (coId: string, poId: string, value: 1 | 2 | 3 | null) => {
     setCells((current) => {
@@ -72,14 +85,14 @@ export function MatrixGrid({
 
   const focusCell = (rowIndex: number, colIndex: number) => {
     const co = cos[rowIndex];
-    const po = pos[colIndex];
+    const po = ordered[colIndex];
     if (!co || !po) return;
     inputRefs.current.get(`${co.id}|${po.id}`)?.focus();
   };
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>, rowIndex: number, colIndex: number) => {
     const co = cos[rowIndex]!;
-    const po = pos[colIndex]!;
+    const po = ordered[colIndex]!;
     switch (event.key) {
       case '1':
       case '2':
@@ -129,9 +142,8 @@ export function MatrixGrid({
       if (!result.error) setDirty(false);
     });
 
-  const poGroup = pos.filter((po) => po.kind === 'PO');
-  const psoGroup = pos.filter((po) => po.kind === 'PSO');
-  const ordered = [...poGroup, ...psoGroup];
+  const poGroup = ordered.filter((po) => po.kind === 'PO');
+  const psoGroup = ordered.filter((po) => po.kind === 'PSO');
 
   return (
     <div className="space-y-2">
