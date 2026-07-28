@@ -41,6 +41,7 @@ course-setup cloning.
 | `…/review` | Pre-calculation anomaly report (FR-13), the six checks |
 | `…/attainment` | Computed attainment, prominent warnings, workflow controls, and the full drill-down |
 | `…/versions` | Immutable snapshot history with what changed between versions |
+| `…/settings` | Course parameter overrides (§4). **Rubric threshold**: editable only by the HoD of the course's department (`settings.course.write`), never on a LOCKED course; everyone who can read the course sees it read-only. Shows the value in force and its Step-2 provenance, a live worked example, and a Remove-override control. Entered as a percentage, stored as the engine's fraction; audit-logged with the prior value |
 | `/programmes/[id]/consolidation` | Programme consolidation as a background job |
 | `/institution` | Institution consolidation (IQAC/Principal) |
 | `/audit` | Audit log (admin/IQAC): who changed what, when, prior value |
