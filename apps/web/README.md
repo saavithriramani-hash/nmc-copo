@@ -44,6 +44,7 @@ course-setup cloning.
 | `…/settings` | Course parameter overrides (§4). **Rubric threshold**: editable only by the HoD of the course's department (`settings.course.write`), never on a LOCKED course; everyone who can read the course sees it read-only. Shows the value in force and its Step-2 provenance, a live worked example, and a Remove-override control. Entered as a percentage, stored as the engine's fraction; audit-logged with the prior value |
 | `/programmes/[id]/consolidation` | Programme consolidation as a background job |
 | `/institution` | Institution consolidation (IQAC/Principal) |
+| `/institution/parameters` | **Attainment bands and weights (§4.2–§4.4)** — the §4.2 band table, the §4.3 end-semester cohort bands, the Step 9 weight groups and the direct/indirect blend. Edited by the **IQAC alone** (`settings.institution.write`); the Principal reads them, the administrator cannot reach them. Institution-level only: no programme or course override is offered for these, unlike the rubric threshold. Drafts are validated by the engine's own `validateParameters`, so nothing storable is uncomputable; the full prior set is audit-logged |
 | `/audit` | Audit log (admin/IQAC): who changed what, when, prior value |
 | `/templates` | HoD: department templates with structure summaries |
 
