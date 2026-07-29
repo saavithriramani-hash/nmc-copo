@@ -4,6 +4,7 @@ import { adoptTemplateAction, saveTemplateFromCourseAction } from '@/actions/tem
 import { cloneCourseSetupAction } from '@/actions/clone';
 import { guard } from '@/lib/authz';
 import { prisma } from '@/lib/db';
+import { assessmentMaxima, formatMark } from '@/lib/assessmentMaxima';
 import { formatThresholdPercent } from '@/lib/courseThreshold';
 import { resolveCourseParameters } from '@/lib/params';
 import { requireSession } from '@/lib/session';
@@ -25,7 +26,14 @@ export default async function AssessmentsPage({
       batch: { select: { programme: { select: { departmentId: true } } } },
       assessments: {
         orderBy: { displayOrder: 'asc' },
-        include: { _count: { select: { items: true, sections: true, markValues: true } } },
+        include: {
+          _count: { select: { items: true, sections: true, markValues: true } },
+          // The maximum is derived from the items — there is no maxMark
+          // column on Assessment. One course's items only (NFR-1): a few
+          // hundred rows, the same bound the adapter accepts.
+          items: { select: { sectionId: true, maxMark: true } },
+          sections: { select: { id: true, optionalAnswerCount: true } },
+        },
       },
       _count: { select: { cos: true } },
     },
@@ -124,11 +132,17 @@ export default async function AssessmentsPage({
                 <th className="border border-gray-300 px-2 py-1">Weight group</th>
                 <th className="border border-gray-300 px-2 py-1">Sections</th>
                 <th className="border border-gray-300 px-2 py-1">Items</th>
+                <th className="border border-gray-300 px-2 py-1 text-right">Maximum</th>
                 <th className="border border-gray-300 px-2 py-1 w-24"></th>
               </tr>
             </thead>
             <tbody>
-              {course.assessments.map((assessment) => (
+              {course.assessments.map((assessment) => {
+                const maxima = assessmentMaxima(
+                  assessment.items.map((item) => ({ sectionId: item.sectionId, maxMark: Number(item.maxMark) })),
+                  assessment.sections,
+                );
+                return (
                 <tr key={assessment.id} className="hover:bg-blue-50">
                   <td className="border border-gray-300 px-2 py-1">
                     <Link href={`/courses/${courseId}/assessments/${assessment.id}`} className="text-blue-700 hover:underline font-medium">
@@ -140,6 +154,20 @@ export default async function AssessmentsPage({
                   <td className="border border-gray-300 px-2 py-1">{assessment.weightGroup}</td>
                   <td className="border border-gray-300 px-2 py-1 text-center">{assessment.shape === 'SECTIONED' ? assessment._count.sections : '—'}</td>
                   <td className="border border-gray-300 px-2 py-1 text-center">{assessment._count.items}</td>
+                  <td className="border border-gray-300 px-2 py-1 text-right whitespace-nowrap">
+                    {assessment._count.items === 0 ? (
+                      <span className="text-amber-700" title="No questions yet, so this assessment has no maximum">
+                        not set
+                      </span>
+                    ) : maxima.hasOptionalSections ? (
+                      <span title={`${formatMark(maxima.totalItemMarks)} marks are printed, but a section limits how many questions count`}>
+                        {formatMark(maxima.obtainableMax)}{' '}
+                        <span className="text-xs text-gray-500">of {formatMark(maxima.totalItemMarks)}</span>
+                      </span>
+                    ) : (
+                      formatMark(maxima.obtainableMax)
+                    )}
+                  </td>
                   <td className="border border-gray-300 px-2 py-1 text-center">
                     {canWrite && assessment._count.markValues === 0 ? (
                       <form action={deleteAssessmentAction.bind(null, courseId, assessment.id)}>
@@ -148,7 +176,8 @@ export default async function AssessmentsPage({
                     ) : null}
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         )}

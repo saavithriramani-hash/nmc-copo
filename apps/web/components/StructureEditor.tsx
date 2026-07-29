@@ -7,6 +7,7 @@ import {
   type StructurePayload,
   type StructureSectionInput,
 } from '@/actions/assessment';
+import { assessmentMaxima, formatMark } from '@/lib/assessmentMaxima';
 import { formatThresholdPercent } from '@/lib/courseThreshold';
 
 interface CoOption {
@@ -76,6 +77,23 @@ export function StructureEditor({ assessmentId, shape, canEdit, cos, weightGroup
     touch();
   };
   const totalItems = sections.reduce((sum, section) => sum + section.items.length, 0);
+
+  /**
+   * The paper's maximum, live while it is being built (§3.1). Shown
+   * because a paper that does not add up to its intended total is the
+   * easiest mistake to make here and the hardest to notice afterwards.
+   * "Answer any n of m" is honoured, so the figure is what a student can
+   * actually score.
+   */
+  const maxima =
+    shape === 'SECTIONED'
+      ? assessmentMaxima(
+          sections.flatMap((section) => section.items.map((item) => ({ sectionId: section.name, maxMark: item.maxMark }))),
+          sections.map((section) => ({ id: section.name, optionalAnswerCount: section.optionalAnswerCount ?? null })),
+        )
+      : shape === 'ITEM_LIST'
+        ? assessmentMaxima(items.map((item) => ({ sectionId: null, maxMark: item.maxMark })), [])
+        : assessmentMaxima([{ sectionId: null, maxMark: singleMaxMark }], []);
 
   // ── item helpers (work for both sectioned and flat lists) ──
   const itemRow = (
@@ -316,6 +334,20 @@ export function StructureEditor({ assessmentId, shape, canEdit, cos, weightGroup
           </p>
         </div>
       ) : null}
+
+      <div className="bg-blue-50 border border-blue-200 rounded px-3 py-2 text-sm">
+        Maximum mark: <strong>{formatMark(maxima.obtainableMax)}</strong>
+        {maxima.hasOptionalSections ? (
+          <span className="text-xs text-gray-600">
+            {' '}
+            — {formatMark(maxima.totalItemMarks)} marks are printed, but a section limits how many questions count, so
+            this is the most a student can score.
+          </span>
+        ) : null}
+        {totalItems === 0 && shape !== 'SINGLE_SCORE' ? (
+          <span className="text-xs text-amber-700"> — no questions added yet.</span>
+        ) : null}
+      </div>
 
       <div className="flex items-center gap-2">
         <button type="button" onClick={save} disabled={!dirty || pending} className="bg-blue-700 text-white rounded px-3 py-1.5 hover:bg-blue-800 disabled:opacity-50">
