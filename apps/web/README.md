@@ -108,6 +108,17 @@ course-setup cloning.
 - **Paste or upload** one assessment's marks (`lib/marks.ts` pure planner),
   matched on register number, with **every** change previewed (old → new)
   before a row is written; empty cells import as blank.
+- **Download the mark sheet** for an assessment
+  (`/api/courses/[id]/assessments/[id]/template`, `marks.write`): every
+  enrolled student down, every question across, **carrying the marks
+  already recorded**. That pre-fill is not convenience — an empty sheet
+  uploaded over a part-marked assessment would read as "nobody attempted
+  anything" and blank every stored mark. An untouched download therefore
+  proposes zero changes. Column headings are exactly the item labels
+  because the importer matches on them, so the maxima and the blank ≠ zero
+  guidance live on a second sheet the importer never reads; Excel
+  validation caps each column at its item maximum while still allowing an
+  empty cell.
 - **Anomaly report** (`lib/anomalies.ts`, aggregated in SQL — NFR-1) runs
   the six FR-13 checks before compute: marks over maximum, over-attempted
   optional sections, students with no marks, unattempted items, COs

@@ -10,7 +10,17 @@ const fmt = (value: number | null) => (value === null ? 'blank' : String(value))
  * number, with EVERY change previewed (old → new) before anything is
  * written. Empty cells import as blank, shown as a change like any other.
  */
-export function MarkImport({ assessmentId, onApplied }: { assessmentId: string; onApplied: () => void }) {
+export function MarkImport({
+  courseId,
+  assessmentId,
+  onApplied,
+}: {
+  courseId: string;
+  assessmentId: string;
+  /** Called with the number applied; the parent closes this panel, so the
+   *  confirmation has to be shown there rather than here. */
+  onApplied: (applied: number) => void;
+}) {
   const [pasted, setPasted] = useState('');
   const [preview, setPreview] = useState<MarkImportPreview | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -33,10 +43,9 @@ export function MarkImport({ assessmentId, onApplied }: { assessmentId: string; 
       const changes = preview.plan!.changes.map((c) => ({ enrolmentId: c.enrolmentId, itemId: c.itemId, value: c.newValue }));
       const result = await commitMarkImportAction(assessmentId, changes);
       if (result.ok) {
-        setMessage(`Applied ${result.applied} change${result.applied === 1 ? '' : 's'}.`);
         setPreview(null);
         setPasted('');
-        onApplied();
+        onApplied(result.applied ?? 0);
       } else {
         setMessage(result.error ?? 'Some cells were rejected.');
       }
@@ -52,6 +61,20 @@ export function MarkImport({ assessmentId, onApplied }: { assessmentId: string; 
         A header row with the register-number column and one column per item label, then a row per student. Matched on
         register number; every change is previewed before it is applied.
       </p>
+
+      <div className="bg-blue-50 border border-blue-200 rounded px-3 py-2 space-y-1">
+        <a
+          href={`/api/courses/${courseId}/assessments/${assessmentId}/template`}
+          className="text-blue-700 hover:underline font-medium text-sm"
+        >
+          ↓ Download the mark sheet for this assessment
+        </a>
+        <p className="text-xs text-gray-700">
+          Every enrolled student and every question, carrying whatever marks are already recorded — so you can fill in
+          the rest and upload it without disturbing them. <b>Leave a cell empty if the student did not attempt that
+          question</b>: an empty cell and a 0 are not the same thing, and clearing a cell will clear that mark.
+        </p>
+      </div>
 
       <div className="grid md:grid-cols-2 gap-3">
         <div className="space-y-1">

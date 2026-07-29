@@ -70,6 +70,13 @@ export interface MarkImportPlan {
 }
 
 const REG_HEADER = /^(reg(ister)?|roll|enroll?ment)\.?\s*(no\.?|number|num)?$/i;
+/**
+ * A name column identifies the student; it is not an item, so it is
+ * skipped rather than reported as an unknown column. The downloadable
+ * template carries one so faculty can see who they are marking, and a
+ * spreadsheet exported from anywhere else usually does too.
+ */
+const NAME_HEADER = /^(student(\s*name)?|name|full\s*name)$/i;
 const norm = (value: string): string => value.trim().toLowerCase();
 
 /**
@@ -109,6 +116,7 @@ export function planMarkImport(args: {
   const columnItems: (ImportItem | null)[] = header.map((cell, index) => {
     if (index === regCol) return null;
     if (cell.trim() === '') return null;
+    if (NAME_HEADER.test(cell.trim())) return null; // identifying, not an item
     const item = itemByLabel.get(norm(cell));
     if (!item) plan.unknownColumns.push(cell.trim());
     return item ?? null;

@@ -67,7 +67,7 @@ export default async function MarkEntryPage({ params }: { params: Promise<{ cour
           <Link href={`/courses/${courseId}/assessments/${assessmentId}`} className="text-blue-700 hover:underline">assessment structure</Link> page.
         </p>
       ) : (
-        <MarkEntry assessmentId={assessmentId} students={students} columns={columns} initial={initial} canEdit={canEdit} />
+        <MarkEntry courseId={courseId} assessmentId={assessmentId} students={students} columns={columns} initial={initial} canEdit={canEdit} />
       )}
     </div>
   );
