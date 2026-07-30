@@ -25,10 +25,10 @@ course-setup cloning.
 
 | Screen | Notes |
 |---|---|
-| `/` | Courses scoped like the Guard scopes them (own / department / programme) |
+| `/` | Courses scoped like the Guard scopes them (own courses / whole department) |
 | `/admin/departments` | Admin: institution bootstrap (engine defaults), departments, programmes. **Rename and delete** for department/programme/batch (batch controls live on the programme page): deletion refuses while anything references the row and names every blocker; never a cascade over courses, marks, rosters, roles or locked snapshots. `onDelete: Restrict` enforces the same rule at the database, so the check-then-delete race fails safe |
 | `/admin/users` | Admin: accounts and role assignments (§2). Create account → one-time temporary password (returned in the action result, never in a URL); grant/end roles with effect dates; reset, deactivate, reactivate. Refuses to strand the institution: you cannot deactivate yourself, nor end the last administrator |
-| `/programmes/[id]` | Coordinator edits PO/PSOs; admin adds batches |
+| `/programmes/[id]` | The **HoD of the programme's department** edits PO/PSOs (`programme.manage`) — there is no programme coordinator, and one HoD covers every programme of the department; admin adds batches |
 | `/courses/new` | HoD creates a course (`course.create`, server-derived department) |
 | `/courses/[id]` | Details (faculty, while DRAFT) + assigned faculty. **Staffing is `course.staff` — HoD only**: faculty see the roster read-only. Assigning an account without the Faculty role is refused (it would grant nothing), and the last instructor cannot be removed |
 | `…/outcomes` | CO editor (code, statement, Bloom levels, reorder). A CO carries **one or more** Bloom levels (checkboxes), stored deduplicated in taxonomy order; at least one is required (CHECK-enforced). Display-only — no attainment figure depends on them. Note FR-5 says "Bloom's level" singular: this is a deliberate change against that baseline |
@@ -44,9 +44,9 @@ course-setup cloning.
 | `…/versions` | Immutable snapshot history with what changed between versions |
 | `…/settings` | Course parameter overrides (§4). **Rubric threshold**: editable only by the HoD of the course's department (`settings.course.write`), never on a LOCKED course; everyone who can read the course sees it read-only. Shows the value in force and its Step-2 provenance, a live worked example, and a Remove-override control. Entered as a percentage, stored as the engine's fraction; audit-logged with the prior value |
 | `/programmes/[id]/consolidation` | Programme consolidation as a background job |
-| `/institution` | Institution consolidation (IQAC/Principal) |
-| `/institution/parameters` | **Attainment bands and weights (§4.2–§4.4)** — the §4.2 band table, the §4.3 end-semester cohort bands, the Step 9 weight groups and the direct/indirect blend. Edited by the **IQAC alone** (`settings.institution.write`); the Principal reads them, the administrator cannot reach them. Institution-level only: no programme or course override is offered for these, unlike the rubric threshold. Drafts are validated by the engine's own `validateParameters`, so nothing storable is uncomputable; the full prior set is audit-logged |
-| `/audit` | Audit log (admin/IQAC): who changed what, when, prior value |
+| `/institution` | Institution consolidation (Dean/IQAC/Principal) |
+| `/institution/parameters` | **Attainment bands and weights (§4.2–§4.4)** — the §4.2 band table, the §4.3 end-semester cohort bands, the Step 9 weight groups and the direct/indirect blend. Edited by the **Dean alone** (`settings.institution.write`); the IQAC and the Principal read them, the administrator cannot reach them. Institution-level only: no programme or course override is offered for these, unlike the rubric threshold. Drafts are validated by the engine's own `validateParameters`, so nothing storable is uncomputable; the full prior set is audit-logged |
+| `/audit` | Audit log (admin/Dean/IQAC): who changed what, when, prior value |
 | `/templates` | HoD: department templates with structure summaries |
 
 ## Engine wiring, drill-down and approval
@@ -142,7 +142,7 @@ plan logic lives in `lib/setupPlans.ts`, unit-tested without a database.
 # database up + migrated + seeded (see packages/db/README.md), then:
 npm run dev -w @copo/web
 # seeded dev logins (password "copo-dev-password"):
-#   admin@nmc.dev, hod.math@nmc.dev, faculty1@nmc.dev, faculty2@nmc.dev, coord.math@nmc.dev
+#   admin@nmc.dev, hod.math@nmc.dev, faculty1@nmc.dev, faculty2@nmc.dev, dean@nmc.dev, iqac@nmc.dev
 ```
 
 Verified without a database: 41 web pure-logic tests (setup plans, the

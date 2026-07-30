@@ -310,7 +310,7 @@ export function InstitutionParameters({ initial, canEdit }: { initial: Parameter
           {message ? <span className="text-xs text-green-800">{message}</span> : null}
         </div>
       ) : (
-        <p className="text-xs text-gray-500">Read-only. These are set by the IQAC.</p>
+        <p className="text-xs text-gray-500">Read-only. These are set by the Dean.</p>
       )}
     </div>
   );

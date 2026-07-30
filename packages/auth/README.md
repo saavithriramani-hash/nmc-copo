@@ -45,16 +45,16 @@ Depends on `@copo/db`; nothing else depends on how identity works.
 - **Effect dates**: role assignments have `[effectiveFrom, effectiveTo)`
   windows; revocation closes the window, never deletes. `guard.check(…,
   at)` answers "who could do this when the snapshot was taken".
-  Scope shape (HoD→department, coordinator→programme, others→none) is a
-  database CHECK constraint.
+  Scope shape (HoD→department, every other role→none) is a database
+  CHECK constraint.
 
 | Role | Scope enforced |
 |---|---|
 | Faculty | Own courses only (instructor rows); edits only while DRAFT. **Not who teaches the course** |
-| HoD | Every course in their department; lock/unlock; course-level parameter overrides; **staffing (`course.staff`)** |
-| Programme coordinator | Their programme: PO/PSOs, programme parameters, articulation matrices, programme attainment. No raw marks |
-| IQAC | Read-all (courses, programmes, departments, institution) + institution defaults + audit log. No raw marks |
-| Principal/Dean | Read-only consolidations/dashboards. No course detail, no marks |
+| HoD | Every course in their department **and every programme of it**: PO/PSOs, articulation matrices, programme *and* course parameter overrides; lock/unlock; **staffing (`course.staff`)** |
+| Dean | Read-all (courses, programmes, departments, institution) + **the institution attainment parameters** + audit log. No raw marks |
+| IQAC | **Read-only**: the same read surface as the Dean, minus `settings.institution.write`. No raw marks |
+| Principal | Read-only consolidations/dashboards. No course detail, no marks |
 | System administrator | Accounts, roles, departments, rollover, backups, audit log. **No academic data at all** |
 
 ## Confirmed scope decisions (ratified 24 Jul 2026)
@@ -62,9 +62,16 @@ Depends on `@copo/db`; nothing else depends on how identity works.
 Raised as interpretation questions during implementation and confirmed;
 changing any of them is now a change request against this baseline.
 
+> **CR-1 (30 Jul 2026)** revised the §2 role table itself: the programme
+> coordinator was removed (the HoD covers every programme of their
+> department), IQAC became read-only, and DEAN was added holding what
+> IQAC previously held. Decision 5 below is restated accordingly; the
+> rest stand unchanged. The migration **deletes** existing coordinator
+> assignments, so that role history does not survive.
+
 1. **Raw marks follow NFR-10 strictly** — "visible only to the course
    faculty and their department chain" means faculty(own) + HoD(dept)
-   and nobody else; IQAC's §2 "read-all" covers setup, results and
+   and nobody else; the §2 "read-all" roles cover setup, results and
    consolidations, not per-student marks.
 2. **Principal** gets consolidation reads only ("read-only dashboards"),
    not per-course drill-down.
@@ -72,8 +79,8 @@ changing any of them is now a change request against this baseline.
    lists only accounts/departments/rollover/backups).
 4. **Submitted courses freeze faculty edits** while the HoD reviews;
    LOCKED freezes everyone (unlock creates a new version).
-5. **Parameter overrides**: institution → IQAC; programme → its
-   coordinator; course (minuted exception) → the HoD.
+5. **Parameter overrides**: institution → the Dean; programme *and*
+   course (minuted exception) → the HoD of that department.
 6. **Staffing is departmental, not the course's own** (`course.staff`,
    HoD only). FR-4 makes assigned faculty part of *creating* a course and
    `course.create` is HoD-only; §2 gives Faculty setup, mark entry,

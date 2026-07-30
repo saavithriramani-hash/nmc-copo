@@ -95,19 +95,11 @@ function CreateUser() {
   );
 }
 
-function GrantRole({
-  user,
-  departments,
-  programmes,
-}: {
-  user: UserView;
-  departments: ScopeOption[];
-  programmes: ScopeOption[];
-}) {
+function GrantRole({ user, departments }: { user: UserView; departments: ScopeOption[] }) {
   const [result, action, pending] = useActionState(grantRoleAction, null);
   const [kind, setKind] = useState<RoleKindValue>('FACULTY');
   const scope = scopeFor(kind);
-  const options = scope === 'department' ? departments : scope === 'programme' ? programmes : [];
+  const options = scope === 'department' ? departments : [];
 
   return (
     <div className="space-y-1">
@@ -261,15 +253,7 @@ function AccountControls({ user }: { user: UserView }) {
   );
 }
 
-export function UserAdmin({
-  users,
-  departments,
-  programmes,
-}: {
-  users: UserView[];
-  departments: ScopeOption[];
-  programmes: ScopeOption[];
-}) {
+export function UserAdmin({ users, departments }: { users: UserView[]; departments: ScopeOption[] }) {
   return (
     <div className="space-y-6">
       <CreateUser />
@@ -302,7 +286,7 @@ export function UserAdmin({
                 <RoleList user={user} />
               </td>
               <td className="border border-gray-300 px-2 py-1 align-top">
-                <GrantRole user={user} departments={departments} programmes={programmes} />
+                <GrantRole user={user} departments={departments} />
               </td>
               <td className="border border-gray-300 px-2 py-1 align-top">
                 <AccountControls user={user} />

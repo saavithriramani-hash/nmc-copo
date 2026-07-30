@@ -33,7 +33,7 @@ export default async function DepartmentsPage({ searchParams }: { searchParams: 
           <p className="font-medium">Create the institution</p>
           <p className="text-xs text-gray-600">
             One institution record holds the default attainment parameters (§4). Defaults are the confirmed values;
-            the IQAC can adjust them later.
+            the Dean can adjust them later.
           </p>
           <div className="flex gap-2">
             <input name="name" required placeholder="Institution name" className="flex-1 border border-gray-300 rounded px-2 py-1.5" />

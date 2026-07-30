@@ -6,7 +6,7 @@ import { logAudit } from '@/lib/audit';
 import { buildInstitutionConsolidation } from '@/lib/reportData';
 import { getSessionUser } from '@/lib/session';
 
-/** Institution consolidation PDF for the IQAC (FR-21). */
+/** Institution consolidation PDF (FR-21) — institution.read. */
 export async function GET(request: Request): Promise<Response> {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: 'Not signed in' }, { status: 401 });

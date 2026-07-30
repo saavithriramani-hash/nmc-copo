@@ -10,10 +10,10 @@ import { requireSession } from '@/lib/session';
 /**
  * Institution attainment bands and weights (§4.2-§4.4).
  *
- * Editing is `settings.institution.write` — the IQAC alone. Reading
- * follows `institution.read`, so the Principal sees the policy in force
- * without being able to change it. The administrator sees neither: they
- * hold no academic data access at all.
+ * Editing is `settings.institution.write` — the DEAN alone. Reading
+ * follows `institution.read`, so the IQAC and the Principal see the
+ * policy in force without being able to change it. The administrator
+ * sees neither: they hold no academic data access at all.
  *
  * These parameters exist only at institution level in the UI. The
  * database and the engine still support programme and course overrides
@@ -47,7 +47,7 @@ export default async function InstitutionParametersPage() {
         <h1 className="text-lg font-semibold">Attainment parameters</h1>
         <p className="text-xs text-gray-600 max-w-3xl">
           The bands and weights the whole college computes with (§4). Changing them changes every figure that is not
-          already locked into a snapshot, across every department — so they are the IQAC&apos;s to set, and every
+          already locked into a snapshot, across every department — so they are the Dean&apos;s to set, and every
           change is recorded in the audit log with the complete previous set.
         </p>
       </div>

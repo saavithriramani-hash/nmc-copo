@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ROLE_CAPABILITIES,
   ROLE_KINDS,
   ROLE_LABELS,
   deactivationWouldOrphanAdmin,
@@ -22,49 +23,48 @@ import {
  */
 
 describe('role scope (§2 role table, mirrored by the database CHECK)', () => {
-  it('requires a department for HoD and a programme for the coordinator, and neither for the rest', () => {
+  it('requires a department for the HoD, and no scope at all for the rest', () => {
     expect(scopeFor('HOD')).toBe('department');
-    expect(scopeFor('PROGRAMME_COORDINATOR')).toBe('programme');
-    for (const kind of ['FACULTY', 'IQAC', 'PRINCIPAL', 'ADMIN'] as const) {
+    for (const kind of ['FACULTY', 'DEAN', 'IQAC', 'PRINCIPAL', 'ADMIN'] as const) {
       expect(scopeFor(kind), kind).toBe('none');
     }
   });
 
-  it('names every role kind', () => {
-    for (const kind of ROLE_KINDS) expect(ROLE_LABELS[kind]).toBeTruthy();
+  it('names and describes every role kind', () => {
+    for (const kind of ROLE_KINDS) {
+      expect(ROLE_LABELS[kind], kind).toBeTruthy();
+      expect(ROLE_CAPABILITIES[kind], kind).toBeTruthy();
+    }
+  });
+
+  it('offers no programme-scoped role — the HoD covers every programme of the department', () => {
+    // ScopeKind itself no longer admits 'programme', so this pins the
+    // catalogue rather than the type: the coordinator is gone for good.
+    expect(ROLE_KINDS).not.toContain('PROGRAMME_COORDINATOR');
+    expect(ROLE_KINDS.filter((kind) => scopeFor(kind) === 'department')).toEqual(['HOD']);
   });
 
   it('accepts a well-formed grant of each shape', () => {
-    expect(validateRoleGrant({ kind: 'HOD', departmentId: 'dept-math', programmeId: null })).toBeNull();
-    expect(
-      validateRoleGrant({ kind: 'PROGRAMME_COORDINATOR', departmentId: null, programmeId: 'prog-math' }),
-    ).toBeNull();
-    expect(validateRoleGrant({ kind: 'IQAC', departmentId: null, programmeId: null })).toBeNull();
+    expect(validateRoleGrant({ kind: 'HOD', departmentId: 'dept-math' })).toBeNull();
+    expect(validateRoleGrant({ kind: 'DEAN', departmentId: null })).toBeNull();
+    expect(validateRoleGrant({ kind: 'IQAC', departmentId: null })).toBeNull();
   });
 
   it('rejects a missing scope', () => {
-    expect(validateRoleGrant({ kind: 'HOD', departmentId: null, programmeId: null })).toMatch(/must be scoped/i);
-    expect(
-      validateRoleGrant({ kind: 'PROGRAMME_COORDINATOR', departmentId: null, programmeId: null }),
-    ).toMatch(/must be scoped/i);
+    expect(validateRoleGrant({ kind: 'HOD', departmentId: null })).toMatch(/must be scoped/i);
   });
 
-  it('rejects the wrong scope, and a scope on an institution-wide role', () => {
+  it('rejects a scope on an institution-wide role', () => {
     // The fault RoleService throws on; caught here first, with a readable message.
-    expect(validateRoleGrant({ kind: 'HOD', departmentId: null, programmeId: 'prog-math' })).toMatch(/department/i);
-    expect(
-      validateRoleGrant({ kind: 'PROGRAMME_COORDINATOR', departmentId: 'dept-math', programmeId: null }),
-    ).toMatch(/programme/i);
-    expect(validateRoleGrant({ kind: 'FACULTY', departmentId: 'dept-math', programmeId: null })).toMatch(
-      /whole institution/i,
-    );
-    expect(validateRoleGrant({ kind: 'ADMIN', departmentId: null, programmeId: 'prog-math' })).toMatch(
-      /whole institution/i,
-    );
+    for (const kind of ['FACULTY', 'DEAN', 'IQAC', 'PRINCIPAL', 'ADMIN'] as const) {
+      expect(validateRoleGrant({ kind, departmentId: 'dept-math' }), kind).toMatch(/whole institution/i);
+    }
   });
 
   it('recognises exactly the six role kinds', () => {
     expect(isRoleKind('HOD')).toBe(true);
+    expect(isRoleKind('DEAN')).toBe(true);
+    expect(isRoleKind('PROGRAMME_COORDINATOR')).toBe(false); // removed 30 Jul 2026
     expect(isRoleKind('SUPERUSER')).toBe(false);
     expect(isRoleKind('hod')).toBe(false);
   });
@@ -72,21 +72,21 @@ describe('role scope (§2 role table, mirrored by the database CHECK)', () => {
 
 describe('duplicate assignments', () => {
   const rows = [
-    { id: 'r1', kind: 'HOD' as const, departmentId: 'dept-math', programmeId: null, effectiveTo: null },
-    { id: 'r2', kind: 'FACULTY' as const, departmentId: null, programmeId: null, effectiveTo: new Date('2025-01-01') },
+    { id: 'r1', kind: 'HOD' as const, departmentId: 'dept-math', effectiveTo: null },
+    { id: 'r2', kind: 'FACULTY' as const, departmentId: null, effectiveTo: new Date('2025-01-01') },
   ];
 
   it('finds an identical role still in force', () => {
-    expect(findDuplicateRole(rows, { kind: 'HOD', departmentId: 'dept-math', programmeId: null })).toBe('r1');
+    expect(findDuplicateRole(rows, { kind: 'HOD', departmentId: 'dept-math' })).toBe('r1');
   });
 
   it('allows the same role for a different scope', () => {
-    expect(findDuplicateRole(rows, { kind: 'HOD', departmentId: 'dept-phys', programmeId: null })).toBeNull();
+    expect(findDuplicateRole(rows, { kind: 'HOD', departmentId: 'dept-phys' })).toBeNull();
   });
 
   it('allows re-granting a role whose window has been closed', () => {
     // Re-appointment after a gap is normal; only an open duplicate is ambiguous.
-    expect(findDuplicateRole(rows, { kind: 'FACULTY', departmentId: null, programmeId: null })).toBeNull();
+    expect(findDuplicateRole(rows, { kind: 'FACULTY', departmentId: null })).toBeNull();
   });
 });
 

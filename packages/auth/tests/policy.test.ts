@@ -8,11 +8,12 @@ import {
   DEPT_MATH,
   DEPT_PHYS,
   PROG_MATH,
+  PROG_MATH_MSC,
   PROG_PHYS,
   actor,
   admin,
-  coordMath,
   course,
+  dean,
   facultyMath1,
   hodMath,
   iqac,
@@ -129,7 +130,7 @@ describe('policy — HoD scope: all courses in their department (§2)', () => {
   });
 
   it('is the ONLY role that may staff a course', () => {
-    for (const who of [facultyMath1, coordMath, iqac, principal, admin]) {
+    for (const who of [facultyMath1, dean, iqac, principal, admin]) {
       expect(decide(who, courseAction('course.staff', 'c-math-1'), C_MATH_1).allow).toBe(false);
     }
     expect(decide(hodMath, courseAction('course.staff', 'c-math-1'), C_MATH_1).allow).toBe(true);
@@ -148,29 +149,73 @@ describe('policy — HoD scope: all courses in their department (§2)', () => {
   });
 });
 
-describe('policy — programme coordinator: their programme (§2)', () => {
-  it('manages PO/PSOs, programme parameters and reads programme attainment — own programme only', () => {
-    expect(decide(coordMath, { type: 'programme.manage', programmeId: 'prog-math' }, PROG_MATH).allow).toBe(true);
-    expect(decide(coordMath, { type: 'settings.programme.write', programmeId: 'prog-math' }, PROG_MATH).allow).toBe(true);
-    expect(decide(coordMath, { type: 'programme.read', programmeId: 'prog-math' }, PROG_MATH).allow).toBe(true);
-    expect(decide(coordMath, { type: 'programme.manage', programmeId: 'prog-phys' }, PROG_PHYS).allow).toBe(false);
-    expect(decide(coordMath, { type: 'programme.read', programmeId: 'prog-phys' }, PROG_PHYS).allow).toBe(false);
+describe('policy — the HoD owns EVERY programme of their department (§2, rev. 30 Jul 2026)', () => {
+  it('manages PO/PSOs and programme parameters for each of them, not only one', () => {
+    for (const programme of [PROG_MATH, PROG_MATH_MSC]) {
+      const id = programme.programmeId;
+      expect(decide(hodMath, { type: 'programme.manage', programmeId: id }, programme).allow, id).toBe(true);
+      expect(decide(hodMath, { type: 'settings.programme.write', programmeId: id }, programme).allow, id).toBe(true);
+      expect(decide(hodMath, { type: 'programme.read', programmeId: id }, programme).allow, id).toBe(true);
+    }
   });
 
-  it('edits articulation matrices and reads courses within the programme — but never raw marks (NFR-10)', () => {
-    expect(decide(coordMath, courseAction('matrix.write', 'c-math-1'), C_MATH_1).allow).toBe(true);
-    expect(decide(coordMath, courseAction('course.read', 'c-math-1'), C_MATH_1).allow).toBe(true);
-    expect(decide(coordMath, courseAction('marks.read', 'c-math-1'), C_MATH_1)).toEqual({
+  it('stops at the department boundary', () => {
+    expect(decide(hodMath, { type: 'programme.manage', programmeId: 'prog-phys' }, PROG_PHYS)).toEqual({
       allow: false,
       reason: 'OUT_OF_SCOPE',
     });
-    expect(decide(coordMath, courseAction('marks.write', 'c-math-1'), C_MATH_1).allow).toBe(false);
-    expect(decide(coordMath, courseAction('course.write', 'c-math-1'), C_MATH_1).allow).toBe(false);
+    expect(decide(hodMath, { type: 'settings.programme.write', programmeId: 'prog-phys' }, PROG_PHYS).allow).toBe(false);
+  });
+
+  it('no other role manages a programme — there is no coordinator to fall back on', () => {
+    for (const who of [facultyMath1, dean, iqac, principal, admin]) {
+      expect(decide(who, { type: 'programme.manage', programmeId: 'prog-math' }, PROG_MATH).allow, who.userId).toBe(false);
+      expect(
+        decide(who, { type: 'settings.programme.write', programmeId: 'prog-math' }, PROG_MATH).allow,
+        who.userId,
+      ).toBe(false);
+    }
   });
 });
 
-describe('policy — IQAC: institution read-all plus global settings (§2)', () => {
+describe('policy — Dean: institution read-all plus the global settings (§2, rev. 30 Jul 2026)', () => {
   it('reads every course, programme, department and the institution', () => {
+    expect(decide(dean, courseAction('course.read', 'c-math-1'), C_MATH_1).allow).toBe(true);
+    expect(decide(dean, courseAction('course.read', 'c-phys-1'), C_PHYS_1).allow).toBe(true);
+    expect(decide(dean, { type: 'programme.read', programmeId: 'prog-phys' }, PROG_PHYS).allow).toBe(true);
+    expect(decide(dean, { type: 'department.read', departmentId: 'dept-math' }, DEPT_MATH).allow).toBe(true);
+    expect(decide(dean, { type: 'institution.read' }, null).allow).toBe(true);
+    expect(decide(dean, { type: 'audit.read' }, null).allow).toBe(true);
+  });
+
+  it('is the ONLY role that writes the institution attainment parameters (§4.2–§4.4)', () => {
+    expect(decide(dean, { type: 'settings.institution.write' }, null).allow).toBe(true);
+    for (const who of [iqac, principal, admin, hodMath, facultyMath1]) {
+      expect(decide(who, { type: 'settings.institution.write' }, null).allow, who.userId).toBe(false);
+    }
+  });
+
+  it('writes nothing below the institution', () => {
+    expect(decide(dean, { type: 'settings.programme.write', programmeId: 'prog-math' }, PROG_MATH).allow).toBe(false);
+    expect(decide(dean, courseAction('course.write', 'c-math-1'), C_MATH_1).allow).toBe(false);
+    expect(decide(dean, courseAction('settings.course.write', 'c-math-1'), C_MATH_1).allow).toBe(false);
+  });
+
+  it('read-all does NOT extend to raw per-student marks (NFR-10)', () => {
+    expect(decide(dean, courseAction('marks.read', 'c-math-1'), C_MATH_1)).toEqual({
+      allow: false,
+      reason: 'OUT_OF_SCOPE',
+    });
+    expect(decide(dean, courseAction('marks.write', 'c-math-1'), C_MATH_1).allow).toBe(false);
+  });
+
+  it('does not manage accounts', () => {
+    expect(decide(dean, { type: 'users.manage' }, null).allow).toBe(false);
+  });
+});
+
+describe('policy — IQAC: read-only (§2, rev. 30 Jul 2026)', () => {
+  it('keeps the whole read surface: courses, programmes, departments, institution, audit log', () => {
     expect(decide(iqac, courseAction('course.read', 'c-math-1'), C_MATH_1).allow).toBe(true);
     expect(decide(iqac, courseAction('course.read', 'c-phys-1'), C_PHYS_1).allow).toBe(true);
     expect(decide(iqac, { type: 'programme.read', programmeId: 'prog-phys' }, PROG_PHYS).allow).toBe(true);
@@ -179,22 +224,34 @@ describe('policy — IQAC: institution read-all plus global settings (§2)', () 
     expect(decide(iqac, { type: 'audit.read' }, null).allow).toBe(true);
   });
 
-  it('writes the institution defaults, and nothing below them', () => {
-    expect(decide(iqac, { type: 'settings.institution.write' }, null).allow).toBe(true);
+  it('writes NOTHING — every write action in the catalogue is denied', () => {
+    expect(decide(iqac, { type: 'settings.institution.write' }, null)).toEqual({
+      allow: false,
+      reason: 'NOT_PERMITTED',
+    });
     expect(decide(iqac, { type: 'settings.programme.write', programmeId: 'prog-math' }, PROG_MATH).allow).toBe(false);
-    expect(decide(iqac, courseAction('course.write', 'c-math-1'), C_MATH_1).allow).toBe(false);
+    expect(decide(iqac, { type: 'programme.manage', programmeId: 'prog-math' }, PROG_MATH).allow).toBe(false);
+    for (const type of ['users.manage', 'departments.manage', 'rollover.execute', 'backups.manage'] as const) {
+      expect(decide(iqac, { type }, null).allow, type).toBe(false);
+    }
+    for (const type of COURSE_ACTION_TYPES) {
+      if (type === 'course.read') continue; // the one course action it keeps
+      expect(decide(iqac, courseAction(type, 'c-math-1'), C_MATH_1).allow, type).toBe(false);
+    }
   });
 
   it('read-all does NOT extend to raw per-student marks (NFR-10)', () => {
     expect(decide(iqac, courseAction('marks.read', 'c-math-1'), C_MATH_1).allow).toBe(false);
   });
 
-  it('does not manage accounts', () => {
-    expect(decide(iqac, { type: 'users.manage' }, null).allow).toBe(false);
+  it('still reaches the consolidations and accreditation bundles it is responsible for', () => {
+    // FR-21/FR-22 guard on institution.read, so read-only costs the IQAC
+    // none of its own work.
+    expect(decide(iqac, { type: 'institution.read' }, null).allow).toBe(true);
   });
 });
 
-describe('policy — Principal/Dean: read-only dashboards (§2)', () => {
+describe('policy — Principal: read-only dashboards (§2)', () => {
   it('reads consolidations at every level', () => {
     expect(decide(principal, { type: 'institution.read' }, null).allow).toBe(true);
     expect(decide(principal, { type: 'department.read', departmentId: 'dept-math' }, DEPT_MATH).allow).toBe(true);
@@ -232,8 +289,8 @@ describe('policy — course creation and assessment templates (department chain)
     }
   });
 
-  it('faculty, coordinator, IQAC and admin do not create courses, manage templates or import rosters', () => {
-    for (const who of [facultyMath1, coordMath, iqac, admin, principal]) {
+  it('faculty, Dean, IQAC, admin and Principal do not create courses, manage templates or import rosters', () => {
+    for (const who of [facultyMath1, dean, iqac, admin, principal]) {
       for (const type of ['course.create', 'templates.manage', 'roster.manage'] as const) {
         expect(decide(who, { type, departmentId: 'dept-math' }, DEPT_MATH).allow, `${who.userId}/${type}`).toBe(false);
       }
@@ -259,15 +316,35 @@ describe('policy — cross-cutting', () => {
     });
   });
 
-  it('multiple roles union: a faculty member who is also a coordinator', () => {
+  it('multiple roles union: a faculty member who also heads another department', () => {
     const both = actor('fac-math-1', [
-      { kind: 'FACULTY', departmentId: null, programmeId: null },
-      { kind: 'PROGRAMME_COORDINATOR', departmentId: null, programmeId: 'prog-math' },
+      { kind: 'FACULTY', departmentId: null },
+      { kind: 'HOD', departmentId: 'dept-physics' },
     ]);
     expect(decide(both, courseAction('marks.write', 'c-math-1'), C_MATH_1).allow).toBe(true); // as faculty
-    expect(decide(both, { type: 'programme.manage', programmeId: 'prog-math' }, PROG_MATH).allow).toBe(true); // as coordinator
-    // Union never grants what neither role has:
+    expect(decide(both, { type: 'programme.manage', programmeId: 'prog-phys' }, PROG_PHYS).allow).toBe(true); // as HoD
+    // Union never grants what neither role has: a maths colleague's course
+    // is outside the faculty scope AND outside the physics headship.
     expect(decide(both, courseAction('marks.read', 'c-math-2'), C_MATH_2).allow).toBe(false);
+    expect(decide(both, { type: 'programme.manage', programmeId: 'prog-math' }, PROG_MATH).allow).toBe(false);
+  });
+
+  it('the Dean and the IQAC differ by exactly one action: settings.institution.write', () => {
+    // Pinning the split, so a later edit cannot quietly hand the IQAC a
+    // write back or strip the Dean of a read.
+    const institutionActions = [
+      { type: 'institution.read' },
+      { type: 'audit.read' },
+      { type: 'users.manage' },
+      { type: 'departments.manage' },
+      { type: 'rollover.execute' },
+      { type: 'backups.manage' },
+    ] as const;
+    for (const action of institutionActions) {
+      expect(decide(dean, action, null).allow, action.type).toBe(decide(iqac, action, null).allow);
+    }
+    expect(decide(dean, { type: 'settings.institution.write' }, null).allow).toBe(true);
+    expect(decide(iqac, { type: 'settings.institution.write' }, null).allow).toBe(false);
   });
 
   it('a missing resource always denies, never allows', () => {

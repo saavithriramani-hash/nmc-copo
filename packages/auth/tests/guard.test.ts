@@ -15,7 +15,7 @@ const users: FakeUser[] = [
   {
     id: 'fac-math-1',
     isActive: true,
-    roles: [{ kind: 'FACULTY', departmentId: null, programmeId: null, effectiveFrom: SINCE_2024, effectiveTo: null }],
+    roles: [{ kind: 'FACULTY', departmentId: null, effectiveFrom: SINCE_2024, effectiveTo: null }],
   },
   {
     id: 'hod-past',
@@ -24,7 +24,6 @@ const users: FakeUser[] = [
       {
         kind: 'HOD',
         departmentId: 'dept-math',
-        programmeId: null,
         effectiveFrom: new Date('2023-06-01T00:00:00Z'),
         effectiveTo: new Date('2025-05-31T00:00:00Z'), // stepped down
       },
@@ -37,7 +36,6 @@ const users: FakeUser[] = [
       {
         kind: 'HOD',
         departmentId: 'dept-math',
-        programmeId: null,
         effectiveFrom: new Date('2027-06-01T00:00:00Z'), // not yet in post
         effectiveTo: null,
       },

@@ -11,7 +11,7 @@ import { parseParametersDraft, type ParametersDraft } from '@/lib/institutionPar
 
 /**
  * Institution attainment bands and weights (§4.2-§4.4) —
- * `settings.institution.write`, which the policy grants to the IQAC
+ * `settings.institution.write`, which the policy grants to the Dean
  * alone. Not the administrator: accounts and infrastructure are theirs,
  * academic policy is not (separation of duties).
  *

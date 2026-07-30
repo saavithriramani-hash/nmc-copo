@@ -10,7 +10,7 @@ import type { ActorContext, CourseResource, ResourceContext } from './context';
  *
  * Scope decisions applied here (confirmed 24 Jul 2026; see README):
  * - Raw per-student marks follow NFR-10 strictly: course faculty and
- *   their department chain (HoD) ONLY. IQAC's §2 "read-all" covers
+ *   their department chain (HoD) ONLY. The §2 "read-all" roles cover
  *   course setup, computed results and consolidations — not raw marks.
  *   Principal sees dashboards/consolidations, not courses or marks.
  * - The system administrator manages accounts and structure, and holds
@@ -18,8 +18,17 @@ import type { ActorContext, CourseResource, ResourceContext } from './context';
  * - Faculty edits require DRAFT status; a submitted course is frozen for
  *   faculty while the HoD reviews (HoD may still edit until locked).
  *   A LOCKED course is editable by no one — unlock first (new version).
- * - Programme-level parameter overrides belong to the programme
- *   coordinator; course-level overrides (minuted exceptions) to the HoD.
+ *
+ * §2 revision (confirmed 30 Jul 2026):
+ * - There is no programme coordinator. The HoD is responsible for every
+ *   programme of their department, and so holds the PO/PSO definitions,
+ *   the articulation matrices and the programme-level parameter
+ *   overrides alongside the course-level ones.
+ * - IQAC is READ-ONLY: read-all, consolidation, accreditation bundles and
+ *   the audit log, but no setting of institution parameters.
+ * - DEAN holds what IQAC formerly held, including the institution
+ *   attainment parameters (§4.2–§4.4). It is the only role that may write
+ *   them; the Principal reads, and the administrator cannot reach them.
  */
 
 export type Decision = { allow: true; via: string } | { allow: false; reason: DenialReason };
@@ -33,9 +42,6 @@ const has = (actor: ActorContext, kind: string): boolean => actor.roles.some((r)
 
 const isHodOf = (actor: ActorContext, departmentId: string): boolean =>
   actor.roles.some((r) => r.kind === 'HOD' && r.departmentId === departmentId);
-
-const isCoordinatorOf = (actor: ActorContext, programmeId: string): boolean =>
-  actor.roles.some((r) => r.kind === 'PROGRAMME_COORDINATOR' && r.programmeId === programmeId);
 
 const instructs = (actor: ActorContext, course: CourseResource): boolean =>
   has(actor, 'FACULTY') && course.instructorIds.includes(actor.userId);
@@ -65,16 +71,19 @@ export function decide(actor: ActorContext, action: Action, resource: ResourceCo
     // ── programme-scoped ─────────────────────────────────────────────
     case 'programme.read': {
       if (resource?.kind !== 'programme') return deny('RESOURCE_NOT_FOUND');
-      if (isCoordinatorOf(actor, resource.programmeId)) return allow('PROGRAMME_COORDINATOR');
       if (isHodOf(actor, resource.departmentId)) return allow('HOD');
+      if (has(actor, 'DEAN')) return allow('DEAN');
       if (has(actor, 'IQAC')) return allow('IQAC');
       if (has(actor, 'PRINCIPAL')) return allow('PRINCIPAL');
       return deny('OUT_OF_SCOPE');
     }
     case 'programme.manage':
     case 'settings.programme.write': {
+      // PO/PSO definitions (FR-2) and programme-level parameter overrides
+      // belong to the HoD of the programme's department: a programme is
+      // owned by exactly one department, and there is no coordinator.
       if (resource?.kind !== 'programme') return deny('RESOURCE_NOT_FOUND');
-      if (isCoordinatorOf(actor, resource.programmeId)) return allow('PROGRAMME_COORDINATOR');
+      if (isHodOf(actor, resource.departmentId)) return allow('HOD');
       return deny('OUT_OF_SCOPE');
     }
 
@@ -82,6 +91,7 @@ export function decide(actor: ActorContext, action: Action, resource: ResourceCo
     case 'department.read': {
       if (resource?.kind !== 'department') return deny('RESOURCE_NOT_FOUND');
       if (isHodOf(actor, resource.departmentId)) return allow('HOD');
+      if (has(actor, 'DEAN')) return allow('DEAN');
       if (has(actor, 'IQAC')) return allow('IQAC');
       if (has(actor, 'PRINCIPAL')) return allow('PRINCIPAL');
       return deny('OUT_OF_SCOPE');
@@ -99,12 +109,16 @@ export function decide(actor: ActorContext, action: Action, resource: ResourceCo
 
     // ── institution-wide ─────────────────────────────────────────────
     case 'institution.read': {
+      if (has(actor, 'DEAN')) return allow('DEAN');
       if (has(actor, 'IQAC')) return allow('IQAC');
       if (has(actor, 'PRINCIPAL')) return allow('PRINCIPAL');
       return deny('NOT_PERMITTED');
     }
     case 'settings.institution.write': {
-      return has(actor, 'IQAC') ? allow('IQAC') : deny('NOT_PERMITTED');
+      // The Dean alone. These parameters change every attainment figure
+      // not already locked into a snapshot, across every department;
+      // IQAC reports on them but does not set them.
+      return has(actor, 'DEAN') ? allow('DEAN') : deny('NOT_PERMITTED');
     }
     case 'users.manage':
     case 'departments.manage':
@@ -114,6 +128,7 @@ export function decide(actor: ActorContext, action: Action, resource: ResourceCo
     }
     case 'audit.read': {
       if (has(actor, 'ADMIN')) return allow('ADMIN');
+      if (has(actor, 'DEAN')) return allow('DEAN');
       if (has(actor, 'IQAC')) return allow('IQAC');
       return deny('NOT_PERMITTED');
     }
@@ -127,14 +142,13 @@ function decideCourse(
 ): Decision {
   const own = instructs(actor, course);
   const hod = isHodOf(actor, course.departmentId);
-  const coordinator = isCoordinatorOf(actor, course.programmeId);
 
   switch (type) {
     case 'course.read': {
       // Setup and computed results — NOT raw marks.
       if (own) return allow('FACULTY(own course)');
       if (hod) return allow('HOD');
-      if (coordinator) return allow('PROGRAMME_COORDINATOR');
+      if (has(actor, 'DEAN')) return allow('DEAN'); // §2 read-all
       if (has(actor, 'IQAC')) return allow('IQAC'); // §2 read-all
       return deny('OUT_OF_SCOPE');
     }
@@ -176,13 +190,13 @@ function decideCourse(
     }
 
     case 'matrix.write': {
-      // §2 grants articulation matrices to the programme coordinator as
-      // well as the course's own chain. Never on a locked course.
+      // The articulation matrix is a programme-level concern held by the
+      // course's own chain: the faculty on a DRAFT, the HoD until locked.
+      // Never on a locked course.
       if (course.status === 'LOCKED') return deny('COURSE_LOCKED');
       if (own && course.status === 'DRAFT') return allow('FACULTY(own course)');
       if (own) return deny('WRONG_STATUS');
       if (hod) return allow('HOD');
-      if (coordinator) return allow('PROGRAMME_COORDINATOR');
       return deny('OUT_OF_SCOPE');
     }
 

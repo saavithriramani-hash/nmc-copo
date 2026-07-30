@@ -4,9 +4,9 @@ import { requireSession } from '@/lib/session';
 
 /**
  * Landing: the courses this user works with — own courses for faculty,
- * every department course for an HoD, programme courses for a
- * coordinator. The list is scoped by the same rules the Guard enforces;
- * opening a course still passes through guard.require on every read.
+ * every course of the department for an HoD (across all its programmes).
+ * The list is scoped by the same rules the Guard enforces; opening a
+ * course still passes through guard.require on every read.
  */
 export default async function HomePage() {
   const user = await requireSession();
@@ -17,9 +17,6 @@ export default async function HomePage() {
         { instructors: { some: { userId: user.userId } } },
         ...(user.hodDepartmentIds.length > 0
           ? [{ batch: { programme: { departmentId: { in: user.hodDepartmentIds } } } }]
-          : []),
-        ...(user.coordinatorProgrammeIds.length > 0
-          ? [{ batch: { programmeId: { in: user.coordinatorProgrammeIds } } }]
           : []),
       ],
     },

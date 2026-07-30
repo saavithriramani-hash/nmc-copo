@@ -11,45 +11,39 @@ import type { RoleKindValue } from '@copo/auth';
  * administrator could lock the institution out of its own system.
  */
 
-export const ROLE_KINDS: readonly RoleKindValue[] = [
-  'FACULTY',
-  'HOD',
-  'PROGRAMME_COORDINATOR',
-  'IQAC',
-  'PRINCIPAL',
-  'ADMIN',
-] as const;
+export const ROLE_KINDS: readonly RoleKindValue[] = ['FACULTY', 'HOD', 'DEAN', 'IQAC', 'PRINCIPAL', 'ADMIN'] as const;
 
 /** The §2 role table, in the college's own words. */
 export const ROLE_LABELS: Record<RoleKindValue, string> = {
   FACULTY: 'Faculty',
   HOD: 'Head of Department',
-  PROGRAMME_COORDINATOR: 'Programme coordinator',
+  DEAN: 'Dean',
   IQAC: 'IQAC / Accreditation cell',
-  PRINCIPAL: 'Principal / Dean',
+  PRINCIPAL: 'Principal',
   ADMIN: 'System administrator',
 };
 
 export const ROLE_CAPABILITIES: Record<RoleKindValue, string> = {
   FACULTY: 'Own courses: setup, mark entry, compute, export, submit for approval.',
-  HOD: 'Own department: all faculty capability department-wide; approve and lock courses.',
-  PROGRAMME_COORDINATOR: 'Own programme: PO/PSO definitions, articulation matrices, programme attainment.',
-  IQAC: 'Institution: read-all, consolidation, global defaults, accreditation bundles.',
+  HOD: 'Own department, all its programmes: all faculty capability department-wide; PO/PSO definitions and articulation matrices; approve and lock courses.',
+  DEAN: 'Institution: read-all, consolidation, accreditation bundles, and the attainment parameters (bands and weights).',
+  IQAC: 'Institution, READ-ONLY: read-all, consolidation, accreditation bundles, audit log. Sets nothing.',
   PRINCIPAL: 'Institution: read-only dashboards.',
   ADMIN: 'Accounts, departments, rollover, backups. No access to academic data.',
 };
 
-export type ScopeKind = 'department' | 'programme' | 'none';
+export type ScopeKind = 'department' | 'none';
 
 /**
  * Which scope a role kind must carry. Mirrors both RoleService.grantRole
  * and the database CHECK constraint — this is a third statement of the
  * same rule, positioned early enough to give a readable message.
+ *
+ * Since the §2 revision of 30 Jul 2026 no role is programme-scoped: the
+ * HoD is responsible for every programme of their department.
  */
 export function scopeFor(kind: RoleKindValue): ScopeKind {
-  if (kind === 'HOD') return 'department';
-  if (kind === 'PROGRAMME_COORDINATOR') return 'programme';
-  return 'none';
+  return kind === 'HOD' ? 'department' : 'none';
 }
 
 export function isRoleKind(value: string): value is RoleKindValue {
@@ -57,28 +51,13 @@ export function isRoleKind(value: string): value is RoleKindValue {
 }
 
 /** Null when the grant is well-formed; otherwise the reason, for display. */
-export function validateRoleGrant(args: {
-  kind: RoleKindValue;
-  departmentId: string | null;
-  programmeId: string | null;
-}): string | null {
-  const scope = scopeFor(args.kind);
+export function validateRoleGrant(args: { kind: RoleKindValue; departmentId: string | null }): string | null {
   const label = ROLE_LABELS[args.kind];
 
-  if (scope === 'department') {
-    if (!args.departmentId) return `${label} must be scoped to a department.`;
-    if (args.programmeId) return `${label} is scoped to a department, not a programme.`;
-    return null;
+  if (scopeFor(args.kind) === 'department') {
+    return args.departmentId ? null : `${label} must be scoped to a department.`;
   }
-  if (scope === 'programme') {
-    if (!args.programmeId) return `${label} must be scoped to a programme.`;
-    if (args.departmentId) return `${label} is scoped to a programme, not a department.`;
-    return null;
-  }
-  if (args.departmentId || args.programmeId) {
-    return `${label} applies to the whole institution and takes no department or programme.`;
-  }
-  return null;
+  return args.departmentId ? `${label} applies to the whole institution and takes no department.` : null;
 }
 
 export interface ActiveRoleRef {
@@ -93,15 +72,14 @@ export interface ActiveRoleRef {
  * ambiguous — exactly what the effect dates exist to answer.
  */
 export function findDuplicateRole(
-  existing: { id: string; kind: RoleKindValue; departmentId: string | null; programmeId: string | null; effectiveTo: Date | null }[],
-  candidate: { kind: RoleKindValue; departmentId: string | null; programmeId: string | null },
+  existing: { id: string; kind: RoleKindValue; departmentId: string | null; effectiveTo: Date | null }[],
+  candidate: { kind: RoleKindValue; departmentId: string | null },
 ): string | null {
   const match = existing.find(
     (role) =>
       role.effectiveTo === null &&
       role.kind === candidate.kind &&
-      (role.departmentId ?? null) === candidate.departmentId &&
-      (role.programmeId ?? null) === candidate.programmeId,
+      (role.departmentId ?? null) === candidate.departmentId,
   );
   return match ? match.id : null;
 }

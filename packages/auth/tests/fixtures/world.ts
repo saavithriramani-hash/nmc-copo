@@ -10,9 +10,15 @@ import { roleEffectiveAt } from '../../src/index';
 /**
  * A two-department fixture world for authorisation tests.
  *
- *   dept-math    → prog-math → c-math-1 (faculty: fac-math-1)
- *                             c-math-2 (faculty: fac-math-2)
- *   dept-physics → prog-phys → c-phys-1 (faculty: fac-phys-1)
+ *   dept-math    → prog-math     → c-math-1 (faculty: fac-math-1)
+ *                                  c-math-2 (faculty: fac-math-2)
+ *                → prog-math-msc  (second programme, no courses)
+ *   dept-physics → prog-phys     → c-phys-1 (faculty: fac-phys-1)
+ *
+ * dept-math deliberately owns TWO programmes: since the §2 revision of
+ * 30 Jul 2026 removed the programme coordinator, the HoD is responsible
+ * for every programme of their department, and a one-programme
+ * department could not tell that apart from per-programme scoping.
  *
  * Course status variants are created per-test via `courseWith`.
  */
@@ -37,6 +43,11 @@ export const C_PHYS_1 = course({
 });
 
 export const PROG_MATH: ProgrammeResource = { kind: 'programme', programmeId: 'prog-math', departmentId: 'dept-math' };
+export const PROG_MATH_MSC: ProgrammeResource = {
+  kind: 'programme',
+  programmeId: 'prog-math-msc',
+  departmentId: 'dept-math',
+};
 export const PROG_PHYS: ProgrammeResource = { kind: 'programme', programmeId: 'prog-phys', departmentId: 'dept-physics' };
 export const DEPT_MATH: DepartmentResource = { kind: 'department', departmentId: 'dept-math' };
 export const DEPT_PHYS: DepartmentResource = { kind: 'department', departmentId: 'dept-physics' };
@@ -47,16 +58,14 @@ export const actor = (userId: string, roles: ActorContext['roles'], isActive = t
   roles,
 });
 
-export const facultyMath1 = actor('fac-math-1', [{ kind: 'FACULTY', departmentId: null, programmeId: null }]);
-export const facultyMath2 = actor('fac-math-2', [{ kind: 'FACULTY', departmentId: null, programmeId: null }]);
-export const facultyPhys1 = actor('fac-phys-1', [{ kind: 'FACULTY', departmentId: null, programmeId: null }]);
-export const hodMath = actor('hod-math', [{ kind: 'HOD', departmentId: 'dept-math', programmeId: null }]);
-export const coordMath = actor('coord-math', [
-  { kind: 'PROGRAMME_COORDINATOR', departmentId: null, programmeId: 'prog-math' },
-]);
-export const iqac = actor('iqac-1', [{ kind: 'IQAC', departmentId: null, programmeId: null }]);
-export const principal = actor('principal-1', [{ kind: 'PRINCIPAL', departmentId: null, programmeId: null }]);
-export const admin = actor('admin-1', [{ kind: 'ADMIN', departmentId: null, programmeId: null }]);
+export const facultyMath1 = actor('fac-math-1', [{ kind: 'FACULTY', departmentId: null }]);
+export const facultyMath2 = actor('fac-math-2', [{ kind: 'FACULTY', departmentId: null }]);
+export const facultyPhys1 = actor('fac-phys-1', [{ kind: 'FACULTY', departmentId: null }]);
+export const hodMath = actor('hod-math', [{ kind: 'HOD', departmentId: 'dept-math' }]);
+export const dean = actor('dean-1', [{ kind: 'DEAN', departmentId: null }]);
+export const iqac = actor('iqac-1', [{ kind: 'IQAC', departmentId: null }]);
+export const principal = actor('principal-1', [{ kind: 'PRINCIPAL', departmentId: null }]);
+export const admin = actor('admin-1', [{ kind: 'ADMIN', departmentId: null }]);
 
 /**
  * In-memory ContextSource for Guard tests: the same world, reachable the
@@ -70,7 +79,6 @@ export interface FakeUser {
   roles: {
     kind: ActorContext['roles'][number]['kind'];
     departmentId: string | null;
-    programmeId: string | null;
     effectiveFrom: Date;
     effectiveTo: Date | null;
   }[];
@@ -80,7 +88,7 @@ export class FakeContextSource implements ContextSource {
   constructor(
     private readonly users: FakeUser[],
     private readonly courses: CourseResource[] = [C_MATH_1, C_MATH_2, C_PHYS_1],
-    private readonly programmes: ProgrammeResource[] = [PROG_MATH, PROG_PHYS],
+    private readonly programmes: ProgrammeResource[] = [PROG_MATH, PROG_MATH_MSC, PROG_PHYS],
     private readonly departments: DepartmentResource[] = [DEPT_MATH, DEPT_PHYS],
   ) {}
 
@@ -90,9 +98,7 @@ export class FakeContextSource implements ContextSource {
     return {
       userId: user.id,
       isActive: user.isActive,
-      roles: user.roles
-        .filter((role) => roleEffectiveAt(role, at))
-        .map(({ kind, departmentId, programmeId }) => ({ kind, departmentId, programmeId })),
+      roles: user.roles.filter((role) => roleEffectiveAt(role, at)).map(({ kind, departmentId }) => ({ kind, departmentId })),
     };
   }
 

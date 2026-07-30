@@ -3,7 +3,7 @@ import type { AuditSink } from './audit';
 import type { Guard } from './authz/guard';
 import { roleEffectiveAt, type EffectiveRole } from './authz/context';
 
-export type RoleKindValue = 'ADMIN' | 'PRINCIPAL' | 'IQAC' | 'PROGRAMME_COORDINATOR' | 'HOD' | 'FACULTY';
+export type RoleKindValue = 'ADMIN' | 'PRINCIPAL' | 'DEAN' | 'IQAC' | 'HOD' | 'FACULTY';
 
 /**
  * Role assignments carry effect dates (§2): staff change hands between
@@ -12,8 +12,8 @@ export type RoleKindValue = 'ADMIN' | 'PRINCIPAL' | 'IQAC' | 'PROGRAMME_COORDINA
  *  - granting creates a row with effectiveFrom (past-dated allowed);
  *  - revoking CLOSES the window (sets effectiveTo) — rows are never
  *    deleted, so history remains queryable at any instant;
- *  - scope shape (HoD→department, coordinator→programme, others→none)
- *    is a database CHECK constraint, not just validation here.
+ *  - scope shape (HoD→department, every other role→none) is a database
+ *    CHECK constraint, not just validation here.
  */
 export class RoleService {
   constructor(
@@ -28,7 +28,6 @@ export class RoleService {
       userId: string;
       kind: RoleKindValue;
       departmentId?: string;
-      programmeId?: string;
       effectiveFrom: Date;
     },
   ): Promise<{ roleId: string }> {
@@ -36,20 +35,13 @@ export class RoleService {
 
     // Fail with a clear message before the database CHECK would.
     if (args.kind === 'HOD' && !args.departmentId) throw new Error('HOD requires a departmentId scope');
-    if (args.kind === 'PROGRAMME_COORDINATOR' && !args.programmeId) {
-      throw new Error('PROGRAMME_COORDINATOR requires a programmeId scope');
-    }
     if (args.kind !== 'HOD' && args.departmentId) throw new Error(`${args.kind} must not carry a departmentId`);
-    if (args.kind !== 'PROGRAMME_COORDINATOR' && args.programmeId) {
-      throw new Error(`${args.kind} must not carry a programmeId`);
-    }
 
     const role = await this.prisma.role.create({
       data: {
         userId: args.userId,
         kind: args.kind,
         departmentId: args.departmentId ?? null,
-        programmeId: args.programmeId ?? null,
         effectiveFrom: args.effectiveFrom,
         effectiveTo: null,
       },
@@ -64,7 +56,6 @@ export class RoleService {
         userId: args.userId,
         kind: args.kind,
         departmentId: args.departmentId ?? null,
-        programmeId: args.programmeId ?? null,
         effectiveFrom: args.effectiveFrom.toISOString(),
       },
     });
@@ -96,8 +87,6 @@ export class RoleService {
    */
   async effectiveRoles(userId: string, at: Date = new Date()): Promise<EffectiveRole[]> {
     const roles = await this.prisma.role.findMany({ where: { userId } });
-    return roles
-      .filter((role) => roleEffectiveAt(role, at))
-      .map(({ kind, departmentId, programmeId }) => ({ kind, departmentId, programmeId }));
+    return roles.filter((role) => roleEffectiveAt(role, at)).map(({ kind, departmentId }) => ({ kind, departmentId }));
   }
 }

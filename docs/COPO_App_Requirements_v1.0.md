@@ -33,16 +33,20 @@ A single institutional system that captures question-wise marks once for every c
 
 ## 2. Users, roles and permissions
 
+> **CR-1 (30 July 2026) — change request against the confirmed baseline.** The role table below supersedes the one issued with v1.0. Three changes, at the college's instruction: the *programme coordinator* is removed and its capabilities pass to the HoD, who is responsible for every programme of their department; *IQAC* becomes read-only; and *Dean* separates from *Principal* as its own role, taking the institution-parameter authority IQAC formerly held. Implemented by migration `20260730000000_roles_dean_and_no_coordinator`, which **deletes** existing coordinator assignments — that role history does not survive the change.
+
 | Role | Scope | Capability |
 |---|---|---|
 | **Faculty** | Own courses | Course setup, mark entry, compute, export, submit for approval |
-| **HoD** | Own department | All faculty capability department-wide; approve and lock courses; department consolidation |
-| **Programme coordinator** | Own programme | POs/PSOs, articulation matrices, programme attainment |
-| **IQAC / Accreditation cell** | Institution | Read-all; institution consolidation; global defaults; accreditation bundles |
-| **Principal / Dean** | Institution | Read-only dashboards |
+| **HoD** | Own department, all its programmes | All faculty capability department-wide; POs/PSOs and articulation matrices; programme- and course-level parameter overrides; approve and lock courses; department consolidation |
+| **Dean** | Institution | Read-all; institution consolidation; accreditation bundles; **sets the institution attainment parameters (§4.2–§4.4)**; audit log |
+| **IQAC / Accreditation cell** | Institution | **Read-only.** Read-all; institution consolidation; accreditation bundles; audit log. Sets nothing |
+| **Principal** | Institution | Read-only dashboards |
 | **System administrator** | Institution | Accounts, departments, academic-year rollover, backups |
 
 Faculty see only their own courses. A locked course is editable only by the HoD or above, and unlocking creates a new version rather than overwriting. Role assignments carry effect dates, because staff change hands between accreditation cycles and the file must still record who computed what.
+
+The Head of Department is the **only** role carrying a scope; every other role is institution-wide. Raw per-student marks remain restricted to the course faculty and their department chain (NFR-10) — neither Dean, IQAC, Principal nor administrator can reach them, and the two institution-wide read-all roles differ by exactly one action: `settings.institution.write`, which the Dean alone holds.
 
 ### 2.1 Authentication
 

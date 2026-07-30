@@ -6,7 +6,7 @@ import { DataExportRunner } from '@/components/DataExportRunner';
 import { guard } from '@/lib/authz';
 import { requireSession } from '@/lib/session';
 
-/** Institution-level consolidation for the IQAC (FR-21), as a background job. */
+/** Institution-level consolidation for the Dean, IQAC and Principal (FR-21), as a background job. */
 export default async function InstitutionPage() {
   const user = await requireSession();
   if (!(await guard.check(user.userId, { type: 'institution.read' })).allow) notFound();

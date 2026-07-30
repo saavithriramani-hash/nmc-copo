@@ -90,7 +90,7 @@ export async function createBatchAction(formData: FormData): Promise<void> {
   revalidatePath(`/programmes/${programmeId}`);
 }
 
-/** PO/PSO definitions (FR-2) — programme coordinator. Replace-all save. */
+/** PO/PSO definitions (FR-2) — the HoD of the programme's department. Replace-all save. */
 export interface OutcomeRow {
   id: string | null;
   code: string;
@@ -320,12 +320,12 @@ export async function deleteProgrammeAction(programmeId: string): Promise<Struct
     select: {
       name: true,
       outcomes: { select: { code: true, kind: true, statement: true } },
-      _count: { select: { batches: true, roles: true } },
+      _count: { select: { batches: true } },
     },
   });
   if (!programme) return { error: 'That programme no longer exists.' };
 
-  const blockers = programmeBlockers({ batches: programme._count.batches, roles: programme._count.roles });
+  const blockers = programmeBlockers({ batches: programme._count.batches });
   if (blockers.length > 0) return { error: blockMessage(programme.name, blockers) };
 
   // The programme's own PO/PSO definitions go with it: they are owned by

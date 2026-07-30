@@ -17,7 +17,8 @@ const STYLE: Record<Level, { badge: string; row: string; word: string }> = {
  */
 export default async function HealthPage() {
   const user = await requireSession();
-  const mayView = user.isAdmin || user.roles.some((role) => role.kind === 'IQAC' || role.kind === 'PRINCIPAL');
+  const mayView =
+    user.isAdmin || user.roles.some((role) => role.kind === 'DEAN' || role.kind === 'IQAC' || role.kind === 'PRINCIPAL');
   if (!mayView) redirect('/');
 
   const report = await collectHealth();

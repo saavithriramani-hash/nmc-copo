@@ -223,11 +223,20 @@ In that person's row, choose the role and press **Grant role**:
 | Role | What you must also choose |
 |---|---|
 | Faculty | nothing |
-| Head of Department | the **department** |
-| Programme coordinator | the **programme** |
+| Head of Department | the **department** (this covers *all* of its programmes) |
+| Dean | nothing |
 | IQAC / Accreditation cell | nothing |
-| Principal / Dean | nothing |
+| Principal | nothing |
 | System administrator | nothing |
+
+The Head of Department is the only role with a scope. Every other role
+applies to the whole institution.
+
+**Dean and IQAC are not the same.** The Dean sets the attainment bands
+and weights that the whole college computes with; the IQAC reads
+everything — courses, consolidations, accreditation bundles, the audit
+log — and changes nothing. If someone asks for "IQAC access so they can
+fix the weights", they are asking to be Dean.
 
 *In force from* defaults to today. Back-date it when someone took up the
 post earlier — the file must show who held which role when a course was

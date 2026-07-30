@@ -138,12 +138,11 @@ export async function grantRoleAction(_prev: ActionResult | null, formData: Form
   if (!userId) return { error: 'No account selected.' };
   if (!isRoleKind(kindRaw)) return { error: 'Choose a role.' };
 
-  // One <select> carries the scope; which column it means depends on the
-  // role, so it is split here rather than in the form.
+  // The scope <select> is meaningful for the HoD alone; every other role
+  // is institution-wide, so whatever it carries is discarded here.
   const departmentId = kindRaw === 'HOD' ? scopeId || null : null;
-  const programmeId = kindRaw === 'PROGRAMME_COORDINATOR' ? scopeId || null : null;
 
-  const problem = validateRoleGrant({ kind: kindRaw, departmentId, programmeId });
+  const problem = validateRoleGrant({ kind: kindRaw, departmentId });
   if (problem) return { error: problem };
 
   const effectiveFrom = effectiveFromRaw ? new Date(effectiveFromRaw) : new Date();
@@ -151,9 +150,9 @@ export async function grantRoleAction(_prev: ActionResult | null, formData: Form
 
   const existing = await prisma.role.findMany({
     where: { userId },
-    select: { id: true, kind: true, departmentId: true, programmeId: true, effectiveTo: true },
+    select: { id: true, kind: true, departmentId: true, effectiveTo: true },
   });
-  if (findDuplicateRole(existing, { kind: kindRaw, departmentId, programmeId })) {
+  if (findDuplicateRole(existing, { kind: kindRaw, departmentId })) {
     return { error: 'This account already holds that role, with the same scope, in force.' };
   }
 
@@ -162,7 +161,6 @@ export async function grantRoleAction(_prev: ActionResult | null, formData: Form
       userId,
       kind: kindRaw,
       ...(departmentId ? { departmentId } : {}),
-      ...(programmeId ? { programmeId } : {}),
       effectiveFrom,
     });
   } catch (err) {

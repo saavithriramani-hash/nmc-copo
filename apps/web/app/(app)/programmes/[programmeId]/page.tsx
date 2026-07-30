@@ -70,7 +70,9 @@ export default async function ProgrammePage({
               ))}
               {programme.outcomes.length === 0 ? (
                 <tr>
-                  <td className="border border-gray-300 px-2 py-2 text-gray-600">Not defined yet — the programme coordinator defines these.</td>
+                  <td className="border border-gray-300 px-2 py-2 text-gray-600">
+                    Not defined yet — the Head of the Department defines these.
+                  </td>
                 </tr>
               ) : null}
             </tbody>

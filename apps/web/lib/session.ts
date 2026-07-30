@@ -18,7 +18,6 @@ export interface SessionUser {
   roles: EffectiveRole[];
   isAdmin: boolean;
   hodDepartmentIds: string[];
-  coordinatorProgrammeIds: string[];
   isFaculty: boolean;
 }
 
@@ -41,7 +40,7 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
     const now = new Date();
     const roles: EffectiveRole[] = user.roles
       .filter((role) => roleEffectiveAt(role, now))
-      .map(({ kind, departmentId, programmeId }) => ({ kind, departmentId, programmeId }));
+      .map(({ kind, departmentId }) => ({ kind, departmentId }));
 
     return {
       userId: user.id,
@@ -52,7 +51,6 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
       roles,
       isAdmin: roles.some((r) => r.kind === 'ADMIN'),
       hodDepartmentIds: roles.filter((r) => r.kind === 'HOD').map((r) => r.departmentId!),
-      coordinatorProgrammeIds: roles.filter((r) => r.kind === 'PROGRAMME_COORDINATOR').map((r) => r.programmeId!),
       isFaculty: roles.some((r) => r.kind === 'FACULTY'),
     };
   } catch (err) {

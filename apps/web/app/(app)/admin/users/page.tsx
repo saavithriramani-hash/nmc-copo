@@ -31,7 +31,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
       : undefined,
     include: {
       roles: {
-        include: { department: { select: { name: true } }, programme: { select: { name: true } } },
+        include: { department: { select: { name: true } } },
         orderBy: { effectiveFrom: 'desc' },
       },
     },
@@ -51,25 +51,19 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
     roles: row.roles.map((role) => ({
       id: role.id,
       kind: role.kind,
-      scopeLabel: role.department?.name ?? role.programme?.name ?? null,
+      scopeLabel: role.department?.name ?? null,
       window: describeWindow(role, now),
       inForce: isInForce(role, now),
     })),
   }));
 
-  const [departments, programmes] = await Promise.all([
-    prisma.department.findMany({ select: { id: true, name: true }, orderBy: { name: 'asc' } }),
-    prisma.programme.findMany({
-      select: { id: true, name: true, department: { select: { name: true } } },
-      orderBy: { name: 'asc' },
-    }),
-  ]);
-
+  // The Head of Department is the only scoped role: every other role is
+  // institution-wide, and a department covers all of its programmes.
+  const departments = await prisma.department.findMany({
+    select: { id: true, name: true },
+    orderBy: { name: 'asc' },
+  });
   const departmentOptions: ScopeOption[] = departments.map((d) => ({ id: d.id, label: d.name }));
-  const programmeOptions: ScopeOption[] = programmes.map((p) => ({
-    id: p.id,
-    label: `${p.name} (${p.department.name})`,
-  }));
 
   return (
     <div className="space-y-6">
@@ -98,7 +92,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
       {rows.length === 0 ? (
         <p className="text-sm text-gray-600">No accounts match “{search}”.</p>
       ) : (
-        <UserAdmin users={users} departments={departmentOptions} programmes={programmeOptions} />
+        <UserAdmin users={users} departments={departmentOptions} />
       )}
     </div>
   );

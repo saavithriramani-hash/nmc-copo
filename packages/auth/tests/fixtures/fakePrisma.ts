@@ -36,9 +36,8 @@ export interface SessionRow {
 export interface RoleRow {
   id: string;
   userId: string;
-  kind: 'ADMIN' | 'PRINCIPAL' | 'IQAC' | 'PROGRAMME_COORDINATOR' | 'HOD' | 'FACULTY';
+  kind: 'ADMIN' | 'PRINCIPAL' | 'DEAN' | 'IQAC' | 'HOD' | 'FACULTY';
   departmentId: string | null;
-  programmeId: string | null;
   effectiveFrom: Date;
   effectiveTo: Date | null;
 }

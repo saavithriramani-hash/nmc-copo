@@ -2,9 +2,9 @@ import type { PrismaClient } from '@copo/db';
 
 /** A role assignment effective at the instant under consideration. */
 export interface EffectiveRole {
-  kind: 'ADMIN' | 'PRINCIPAL' | 'IQAC' | 'PROGRAMME_COORDINATOR' | 'HOD' | 'FACULTY';
+  kind: 'ADMIN' | 'PRINCIPAL' | 'DEAN' | 'IQAC' | 'HOD' | 'FACULTY';
+  /** HOD only; every other role is institution-wide and leaves this null. */
   departmentId: string | null;
-  programmeId: string | null;
 }
 
 export interface ActorContext {
@@ -64,16 +64,14 @@ export class PrismaContextSource implements ContextSource {
       select: {
         id: true,
         isActive: true,
-        roles: { select: { kind: true, departmentId: true, programmeId: true, effectiveFrom: true, effectiveTo: true } },
+        roles: { select: { kind: true, departmentId: true, effectiveFrom: true, effectiveTo: true } },
       },
     });
     if (!user) return null;
     return {
       userId: user.id,
       isActive: user.isActive,
-      roles: user.roles
-        .filter((role) => roleEffectiveAt(role, at))
-        .map(({ kind, departmentId, programmeId }) => ({ kind, departmentId, programmeId })),
+      roles: user.roles.filter((role) => roleEffectiveAt(role, at)).map(({ kind, departmentId }) => ({ kind, departmentId })),
     };
   }
 

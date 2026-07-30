@@ -41,13 +41,14 @@ describe('department blockers', () => {
 
 describe('programme blockers', () => {
   it('permits deletion of an empty programme', () => {
-    expect(programmeBlockers({ batches: 0, roles: 0 })).toEqual([]);
+    expect(programmeBlockers({ batches: 0 })).toEqual([]);
   });
 
-  it('blocks on batches and on coordinator role assignments', () => {
-    expect(programmeBlockers({ batches: 1, roles: 0 })[0]!.label).toBe('1 batch');
-    expect(programmeBlockers({ batches: 3, roles: 0 })[0]!.label).toBe('3 batches');
-    expect(programmeBlockers({ batches: 0, roles: 2 })[0]!.label).toBe('2 role assignments');
+  it('blocks on batches — the only thing that can still reference a programme', () => {
+    // No role is programme-scoped since the §2 revision of 30 Jul 2026,
+    // so a role assignment can no longer hold a programme open.
+    expect(programmeBlockers({ batches: 1 })[0]!.label).toBe('1 batch');
+    expect(programmeBlockers({ batches: 3 })[0]!.label).toBe('3 batches');
   });
 });
 

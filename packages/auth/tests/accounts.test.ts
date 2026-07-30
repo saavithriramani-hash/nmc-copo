@@ -36,7 +36,7 @@ class FakeDbContextSource implements ContextSource {
       isActive: user.isActive,
       roles: this.db.rolesTable
         .filter((r) => r.userId === userId && roleEffectiveAt(r, at))
-        .map(({ kind, departmentId, programmeId }) => ({ kind, departmentId, programmeId })),
+        .map(({ kind, departmentId }) => ({ kind, departmentId })),
     };
   }
 
@@ -86,7 +86,6 @@ beforeEach(async () => {
     userId: 'admin-1',
     kind: 'ADMIN',
     departmentId: null,
-    programmeId: null,
     effectiveFrom: new Date('2024-01-01T00:00:00Z'),
     effectiveTo: null,
   });
@@ -247,7 +246,7 @@ describe('role assignments carry effect dates (§2)', () => {
 
     // Who held the role when a 2024 course was computed? Still answerable.
     expect(await rolesService.effectiveRoles(userId, new Date('2024-12-01T00:00:00Z'))).toEqual([
-      { kind: 'HOD', departmentId: 'dept-math', programmeId: null },
+      { kind: 'HOD', departmentId: 'dept-math' },
     ]);
     expect(await rolesService.effectiveRoles(userId, new Date('2026-01-01T00:00:00Z'))).toEqual([]);
     expect(audit.events.filter((e) => e.action === 'ROLE_GRANTED')).toHaveLength(1);

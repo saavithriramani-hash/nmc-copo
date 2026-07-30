@@ -130,17 +130,22 @@ async function main(): Promise<void> {
       { id: 'user-admin', email: 'admin@nmc.dev', fullName: 'System Administrator', passwordHash: devHash, mustChangePassword: false },
       { id: 'user-hod-math', email: 'hod.math@nmc.dev', fullName: 'HoD Mathematics', passwordHash: devHash, mustChangePassword: false },
       { id: 'user-fac-1', email: 'faculty1@nmc.dev', fullName: 'Course Faculty', passwordHash: devHash, mustChangePassword: false },
-      { id: 'user-coord-math', email: 'coord.math@nmc.dev', fullName: 'Programme Coordinator (Mathematics)', passwordHash: devHash, mustChangePassword: false },
+      { id: 'user-dean', email: 'dean@nmc.dev', fullName: 'Dean', passwordHash: devHash, mustChangePassword: false },
+      { id: 'user-iqac', email: 'iqac@nmc.dev', fullName: 'IQAC Coordinator', passwordHash: devHash, mustChangePassword: false },
       { id: 'user-fac-2', email: 'faculty2@nmc.dev', fullName: 'Second Faculty', passwordHash: devHash, mustChangePassword: false },
     ],
   });
   const effectiveFrom = new Date('2024-06-01T00:00:00Z');
+  // §2 (rev. 30 Jul 2026): the HoD covers every programme of the
+  // department — there is no coordinator. The Dean sets the institution
+  // attainment parameters; the IQAC reads everything and writes nothing.
   await prisma.role.createMany({
     data: [
       { id: 'role-admin', userId: 'user-admin', kind: 'ADMIN', effectiveFrom },
       { id: 'role-hod', userId: 'user-hod-math', kind: 'HOD', departmentId: 'dept-math', effectiveFrom },
       { id: 'role-fac', userId: 'user-fac-1', kind: 'FACULTY', effectiveFrom },
-      { id: 'role-coord', userId: 'user-coord-math', kind: 'PROGRAMME_COORDINATOR', programmeId: 'prog-bsc-math', effectiveFrom },
+      { id: 'role-dean', userId: 'user-dean', kind: 'DEAN', effectiveFrom },
+      { id: 'role-iqac', userId: 'user-iqac', kind: 'IQAC', effectiveFrom },
       { id: 'role-fac-2', userId: 'user-fac-2', kind: 'FACULTY', effectiveFrom },
     ],
   });
@@ -350,7 +355,7 @@ async function main(): Promise<void> {
   };
   console.log('Seed complete:', counts);
   console.log('Course id: course-mat301 — try `npm run smoke` to run the adapter + engine against it.');
-  console.log(`DEV logins (password "${DEV_PASSWORD}", local only): admin@nmc.dev, hod.math@nmc.dev, faculty1@nmc.dev, faculty2@nmc.dev, coord.math@nmc.dev`);
+  console.log(`DEV logins (password "${DEV_PASSWORD}", local only): admin@nmc.dev, hod.math@nmc.dev, faculty1@nmc.dev, faculty2@nmc.dev, dean@nmc.dev, iqac@nmc.dev`);
 }
 
 main()

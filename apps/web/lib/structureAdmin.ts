@@ -52,11 +52,14 @@ export function departmentBlockers(counts: {
   ]);
 }
 
-export function programmeBlockers(counts: { batches: number; roles: number }): Blocker[] {
-  return collect([
-    [counts.batches, 'batch', 'batches'],
-    [counts.roles, 'role assignment'],
-  ]);
+/**
+ * No role assignment can reference a programme since the §2 revision of
+ * 30 Jul 2026 — the HoD is department-scoped and covers every programme —
+ * so batches are the only thing that can hold a programme open. The
+ * department still checks role assignments, because HoD rows point there.
+ */
+export function programmeBlockers(counts: { batches: number }): Blocker[] {
+  return collect([[counts.batches, 'batch', 'batches']]);
 }
 
 export function batchBlockers(counts: { courses: number; roster: number }): Blocker[] {

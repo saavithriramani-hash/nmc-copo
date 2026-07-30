@@ -68,8 +68,8 @@ enum CourseStatus {
 enum RoleKind {
   ADMIN
   PRINCIPAL
+  DEAN
   IQAC
-  PROGRAMME_COORDINATOR
   HOD
   FACULTY
 }
@@ -153,7 +153,6 @@ model Programme {
 
   outcomes ProgrammeOutcome[]
   batches  Batch[]
-  roles    Role[]
 
   @@unique([departmentId, name])
 }
@@ -520,8 +519,9 @@ model Session {
 
 /// A role assignment with effect dates (§2: staff change hands between
 /// accreditation cycles; the file must still record who computed what).
-/// Scope: HOD → departmentId; PROGRAMME_COORDINATOR → programmeId;
-/// institution-wide roles leave both null.
+/// Scope: HOD → departmentId; every other role is institution-wide and
+/// leaves it null. No role is programme-scoped — the HoD is responsible
+/// for all programmes of their department.
 model Role {
   id            String      @id @default(cuid())
   userId        String
@@ -529,8 +529,6 @@ model Role {
   kind          RoleKind
   departmentId  String?
   department    Department? @relation(fields: [departmentId], references: [id], onDelete: Restrict)
-  programmeId   String?
-  programme     Programme?  @relation(fields: [programmeId], references: [id], onDelete: Restrict)
   effectiveFrom DateTime
   effectiveTo   DateTime? // null = current
 

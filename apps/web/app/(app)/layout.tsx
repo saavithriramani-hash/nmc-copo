@@ -5,20 +5,21 @@ import { requireSession } from '@/lib/session';
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireSession();
 
-  const isIqacOrPrincipal = user.roles.some((role) => role.kind === 'IQAC' || role.kind === 'PRINCIPAL');
+  // Nav visibility only — the Guard, not this list, decides access. The
+  // three institution-wide roles differ on the pages they reach, so they
+  // are named separately rather than lumped together.
+  const holds = (kind: (typeof user.roles)[number]['kind']) => user.roles.some((role) => role.kind === kind);
+  const readsInstitution = holds('DEAN') || holds('IQAC') || holds('PRINCIPAL');
+
   const nav: { href: string; label: string; show: boolean }[] = [
     { href: '/', label: 'Courses', show: true },
     { href: '/programmes', label: 'Programmes', show: true },
-    { href: '/institution', label: 'Institution', show: isIqacOrPrincipal },
+    { href: '/institution', label: 'Institution', show: readsInstitution },
     { href: '/templates', label: 'Assessment templates', show: user.hodDepartmentIds.length > 0 },
     { href: '/admin/departments', label: 'Departments', show: user.isAdmin },
     { href: '/admin/users', label: 'Accounts & roles', show: user.isAdmin },
-    { href: '/audit', label: 'Audit log', show: user.isAdmin || user.roles.some((role) => role.kind === 'IQAC') },
-    {
-      href: '/admin/health',
-      label: 'System health',
-      show: user.isAdmin || user.roles.some((role) => role.kind === 'IQAC' || role.kind === 'PRINCIPAL'),
-    },
+    { href: '/audit', label: 'Audit log', show: user.isAdmin || holds('DEAN') || holds('IQAC') },
+    { href: '/admin/health', label: 'System health', show: user.isAdmin || readsInstitution },
   ];
 
   return (

@@ -5,7 +5,7 @@ import { requireSession } from '@/lib/session';
 
 /**
  * The audit log (FR-17 / NFR-9): who changed what, when, and the prior
- * value. Readable by the administrator and the IQAC.
+ * value. Readable by the administrator, the Dean and the IQAC.
  */
 export default async function AuditPage({
   searchParams,
