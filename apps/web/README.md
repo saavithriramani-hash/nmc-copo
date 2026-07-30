@@ -38,6 +38,7 @@ course-setup cloning.
 | `/batches/[id]/roster` | Roster import from Excel/CSV with a full preview; roster list (HoD/admin) |
 | `…/enrolment` | Draw a course's students from the batch roster — tick names, never type register numbers |
 | `…/marks` → `…/marks/[id]` | Assessment picker → the mark entry grid + paste/upload |
+| `…/feedback` | **CO-wise indirect feedback (Step 8)** — the 3-point tally per outcome, entered as aggregate counts. `course.write`, like COs and assessments. The indirect value previews live via the engine's own `step8IndirectAttainment`. A blank row is stored as **no row**, so the engine yields `null` and the course reports direct-only; it is never a rating of zero |
 | `…/review` | Pre-calculation anomaly report (FR-13), the six checks |
 | `…/attainment` | Computed attainment, prominent warnings, workflow controls, and the full drill-down |
 | `…/versions` | Immutable snapshot history with what changed between versions |

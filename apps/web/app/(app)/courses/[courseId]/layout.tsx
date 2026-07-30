@@ -43,6 +43,7 @@ export default async function CourseLayout({
     { href: `/courses/${courseId}/assessments`, label: 'Assessments' },
     { href: `/courses/${courseId}/enrolment`, label: 'Enrolment' },
     { href: `/courses/${courseId}/marks`, label: 'Marks' },
+    { href: `/courses/${courseId}/feedback`, label: 'Feedback' },
     { href: `/courses/${courseId}/review`, label: 'Review' },
     { href: `/courses/${courseId}/attainment`, label: 'Attainment' },
     { href: `/courses/${courseId}/versions`, label: 'Versions' },
