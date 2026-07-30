@@ -33,19 +33,33 @@ export function WorkflowPanel({
   const [reason, setReason] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  /**
+   * Which operation is running, so the button that was pressed can say
+   * so. Locking recomputes the course and writes an immutable snapshot;
+   * a dimmed button with an unchanged label reads as a frozen page.
+   */
+  const [busy, setBusy] = useState<'submit' | 'lock' | 'unlock' | null>(null);
 
-  const run = (fn: () => Promise<{ ok: boolean; error?: string; version?: number }>) =>
+  const run = (kind: 'submit' | 'lock' | 'unlock', fn: () => Promise<{ ok: boolean; error?: string; version?: number }>) => {
+    setBusy(kind);
     startTransition(async () => {
-      const result = await fn();
-      if (result.ok) {
-        setMessage(result.version ? `Locked as version ${result.version}.` : 'Done.');
-        setAcknowledged(false);
-        setReason('');
-        router.refresh();
-      } else {
-        setMessage(result.error ?? 'Could not complete.');
+      try {
+        const result = await fn();
+        if (result.ok) {
+          setMessage(result.version ? `Locked as version ${result.version}.` : 'Done.');
+          setAcknowledged(false);
+          setReason('');
+          router.refresh();
+        } else {
+          setMessage(result.error ?? 'Could not complete.');
+        }
+      } finally {
+        // Cleared even on failure, or the panel stays stuck on "Locking…"
+        // with no way back.
+        setBusy(null);
       }
     });
+  };
 
   const blocking = warnings.length > 0 && !acknowledged;
 
@@ -76,23 +90,23 @@ export function WorkflowPanel({
         {canSubmit ? (
           <button
             type="button"
-            onClick={() => run(() => submitCourseAction(courseId))}
+            onClick={() => run('submit', () => submitCourseAction(courseId))}
             disabled={pending}
             className="bg-blue-700 text-white rounded px-3 py-1.5 hover:bg-blue-800 disabled:opacity-50"
           >
-            Submit for approval
+            {busy === 'submit' ? 'Submitting…' : 'Submit for approval'}
           </button>
         ) : null}
 
         {canLock ? (
           <button
             type="button"
-            onClick={() => run(() => lockCourseAction(courseId, warnings.length > 0 ? fingerprint : null))}
+            onClick={() => run('lock', () => lockCourseAction(courseId, warnings.length > 0 ? fingerprint : null))}
             disabled={pending || blocking}
             title={blocking ? 'Acknowledge the warnings first' : ''}
             className="bg-green-700 text-white rounded px-3 py-1.5 hover:bg-green-800 disabled:opacity-50"
           >
-            Approve and lock
+            {busy === 'lock' ? 'Locking and snapshotting…' : 'Approve and lock'}
           </button>
         ) : null}
 
@@ -106,11 +120,11 @@ export function WorkflowPanel({
             />
             <button
               type="button"
-              onClick={() => run(() => unlockCourseAction(courseId, reason))}
+              onClick={() => run('unlock', () => unlockCourseAction(courseId, reason))}
               disabled={pending || reason.trim().length < 5}
               className="border border-gray-300 rounded px-3 py-1.5 hover:bg-gray-100 disabled:opacity-50"
             >
-              Unlock (creates a new version)
+              {busy === 'unlock' ? 'Unlocking…' : 'Unlock (creates a new version)'}
             </button>
           </>
         ) : null}

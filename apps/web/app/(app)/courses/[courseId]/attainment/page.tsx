@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { DownloadButton } from '@/components/DownloadButton';
 import { DrillDown } from '@/components/DrillDown';
 import { WorkflowPanel } from '@/components/WorkflowPanel';
 import { guard } from '@/lib/authz';
@@ -58,15 +59,18 @@ export default async function AttainmentPage({ params }: { params: Promise<{ cou
         ) : (
           <span className="text-xs text-gray-600">computed just now from the current marks</span>
         )}
-        <a
-          href={`/api/courses/${courseId}/report`}
-          className="text-xs border border-gray-300 rounded px-2 py-1 hover:bg-gray-100 ml-auto"
-        >
-          PDF report
-        </a>
-        <a href={`/api/courses/${courseId}/export`} className="text-xs border border-gray-300 rounded px-2 py-1 hover:bg-gray-100">
-          Export to Excel
-        </a>
+        <span className="ml-auto">
+          <DownloadButton
+            href={`/api/courses/${courseId}/report`}
+            label="PDF report"
+            fallbackName={`CO-PO_${course.code}.pdf`}
+          />
+        </span>
+        <DownloadButton
+          href={`/api/courses/${courseId}/export`}
+          label="Export to Excel"
+          fallbackName={`CO-PO_${course.code}.xlsx`}
+        />
         <Link href={`/courses/${courseId}/versions`} className="text-xs text-blue-700 hover:underline">
           Version history →
         </Link>

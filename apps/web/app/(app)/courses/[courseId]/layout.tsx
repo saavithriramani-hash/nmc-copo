@@ -1,6 +1,6 @@
-import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { AuthzDeniedError } from '@copo/auth';
+import { CourseTabs } from '@/components/CourseTabs';
 import { guard } from '@/lib/authz';
 import { prisma } from '@/lib/db';
 import { requireSession } from '@/lib/session';
@@ -63,17 +63,7 @@ export default async function CourseLayout({
           </p>
         </div>
       </div>
-      <nav className="border-b border-gray-300 flex gap-1">
-        {tabs.map((tab) => (
-          <Link
-            key={tab.href}
-            href={tab.href}
-            className="px-3 py-1.5 border border-b-0 border-gray-300 rounded-t bg-white text-gray-700 hover:text-blue-700"
-          >
-            {tab.label}
-          </Link>
-        ))}
-      </nav>
+      <CourseTabs tabs={tabs} basePath={`/courses/${courseId}`} />
       {children}
     </div>
   );
