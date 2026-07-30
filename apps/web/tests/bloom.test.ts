@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   BLOOM_LEVELS,
+  bloomOrdinal,
+  bloomShortLabel,
   formatBloomLevels,
   isBloomLevel,
   normaliseBloomLevels,
@@ -12,6 +14,28 @@ import {
  * no attainment figure depends on these — so the rules that matter are
  * canonical ordering, deduplication, and never storing an empty list.
  */
+
+describe('taxonomy numbering (the L1–L6 the CO editor shows)', () => {
+  it('numbers the levels 1 to 6 in taxonomy order, not alphabetically', () => {
+    expect(BLOOM_LEVELS.map(bloomOrdinal)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(bloomOrdinal('Remember')).toBe(1);
+    expect(bloomOrdinal('Create')).toBe(6);
+  });
+
+  it('returns 0 for anything outside the taxonomy rather than a misleading number', () => {
+    // 0 is not a level, so a bad value cannot be mistaken for L1.
+    expect(bloomOrdinal('Synthesise')).toBe(0);
+    expect(bloomOrdinal('')).toBe(0);
+  });
+
+  it('labels each level with its number and name', () => {
+    expect(bloomShortLabel('Apply')).toBe('L3 Apply');
+    expect(bloomShortLabel('Remember')).toBe('L1 Remember');
+    // Every label is distinct — the editor uses them as button text.
+    const labels = BLOOM_LEVELS.map(bloomShortLabel);
+    expect(new Set(labels).size).toBe(BLOOM_LEVELS.length);
+  });
+});
 
 describe('recognising levels', () => {
   it('accepts the six taxonomy levels and nothing else', () => {

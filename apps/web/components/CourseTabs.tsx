@@ -36,7 +36,13 @@ export function CourseTabs({ tabs, basePath }: { tabs: CourseTab[]; basePath: st
     href === basePath ? pathname === basePath : pathname === href || pathname.startsWith(`${href}/`);
 
   return (
-    <nav className="border-b border-gray-300 flex gap-1">
+    // `whitespace-nowrap` keeps each label on one line — two-line tabs
+    // doubled the height of the bar on every course page. If eleven tabs
+    // still will not fit, the bar scrolls rather than wrapping.
+    // Named, because the application shell renders a <nav> of its own:
+    // two unlabelled navigations on one page are indistinguishable to a
+    // screen reader.
+    <nav aria-label="Course sections" className="border-b border-gray-300 flex gap-0.5 overflow-x-auto">
       {tabs.map((tab) => {
         const active = isActive(tab.href);
         const pending = target === tab.href && !active;
@@ -49,7 +55,7 @@ export function CourseTabs({ tabs, basePath }: { tabs: CourseTab[]; basePath: st
             onClick={() => {
               if (!active) setTarget(tab.href);
             }}
-            className={`px-3 py-1.5 border border-b-0 rounded-t flex items-center gap-1.5 ${
+            className={`px-2 py-1 text-xs whitespace-nowrap border border-b-0 rounded-t flex items-center gap-1 ${
               active
                 ? 'border-gray-300 bg-blue-50 text-blue-800 font-medium'
                 : 'border-gray-300 bg-white text-gray-700 hover:text-blue-700'
@@ -60,9 +66,9 @@ export function CourseTabs({ tabs, basePath }: { tabs: CourseTab[]; basePath: st
               The spinner occupies a reserved slot whether or not it is
               spinning, so the tab bar cannot reflow mid-click.
             */}
-            <span aria-hidden="true" className="inline-block h-3 w-3">
+            <span aria-hidden="true" className="inline-block h-2.5 w-2.5">
               {pending ? (
-                <span className="block h-3 w-3 rounded-full border-2 border-gray-300 border-t-blue-700 animate-spin" />
+                <span className="block h-2.5 w-2.5 rounded-full border-2 border-gray-300 border-t-blue-700 animate-spin" />
               ) : null}
             </span>
           </Link>
