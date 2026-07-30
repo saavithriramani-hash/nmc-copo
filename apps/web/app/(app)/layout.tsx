@@ -14,6 +14,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     { href: '/admin/departments', label: 'Departments', show: user.isAdmin },
     { href: '/admin/users', label: 'Accounts & roles', show: user.isAdmin },
     { href: '/audit', label: 'Audit log', show: user.isAdmin || user.roles.some((role) => role.kind === 'IQAC') },
+    {
+      href: '/admin/health',
+      label: 'System health',
+      show: user.isAdmin || user.roles.some((role) => role.kind === 'IQAC' || role.kind === 'PRINCIPAL'),
+    },
   ];
 
   return (

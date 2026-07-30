@@ -1,0 +1,88 @@
+# CO–PO Attainment — production stack for the college server.
+#
+# Three containers and nothing else:
+#   db      PostgreSQL, the only place data lives
+#   app     the application (applies migrations at start-up)
+#   backup  takes the nightly dump, copies it off the machine, and
+#           proves weekly that the dump can actually be restored
+#
+# No Kubernetes, no message queue, no external service. Everything the
+# system needs is in this file. See docs/OPERATIONS.md.
+
+services:
+  db:
+    image: postgres:16-bookworm
+    container_name: copo-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-copo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-copo}
+      # Deterministic collation, so ordering never changes under us.
+      POSTGRES_INITDB_ARGS: '--encoding=UTF8 --locale=C'
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-copo} -d ${POSTGRES_DB:-copo}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    # Not published: only the other containers may reach the database.
+    expose:
+      - '5432'
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: copo-app:${APP_VERSION:-latest}
+    container_name: copo-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-copo}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-copo}
+      NODE_ENV: production
+      COPO_STORAGE_DIR: /app/storage
+      BACKUP_DIR: /backups
+    volumes:
+      # Accreditation bundles and data exports.
+      - app_storage:/app/storage
+      # Read-only: the app reports on backups, it never writes them.
+      - ${BACKUP_DIR:-./backups}:/backups:ro
+    ports:
+      - '${APP_PORT:-3000}:3000'
+
+  backup:
+    # The SAME major version as db, so pg_dump always matches the server.
+    image: postgres:16-bookworm
+    container_name: copo-backup
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-copo}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-copo}
+      BACKUP_DIR: /backups
+      BACKUP_SECONDARY_DIR: ${BACKUP_SECONDARY_DIR:-}
+      BACKUP_AT: ${BACKUP_AT:-02:00}
+      KEEP_DAILY_DAYS: ${KEEP_DAILY_DAYS:-35}
+      KEEP_WEEKLY_DAYS: ${KEEP_WEEKLY_DAYS:-400}
+      KEEP_MONTHLY_DAYS: ${KEEP_MONTHLY_DAYS:-2200}
+      VERIFY_EVERY_DAYS: ${VERIFY_EVERY_DAYS:-7}
+    volumes:
+      - ${BACKUP_DIR:-./backups}:/backups
+      # The second location on campus: a share from another machine,
+      # mounted here. Left as ./backups-secondary if not configured.
+      - ${BACKUP_SECONDARY_MOUNT:-./backups-secondary}:/backups-secondary
+      - ./ops:/ops:ro
+    entrypoint: ['/bin/bash', '/ops/backup-loop.sh']
+
+volumes:
+  db_data:
+  app_storage:

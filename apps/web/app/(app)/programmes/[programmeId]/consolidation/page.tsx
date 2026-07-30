@@ -30,6 +30,14 @@ export default async function ProgrammeConsolidationPage({ params }: { params: P
         courses are computed the same way, so the table always reflects the marks as they stand.
       </p>
       <ConsolidationRunner scope={{ kind: 'programme', programmeId }} />
+      <p className="text-sm">
+        <a href={`/api/programmes/${programmeId}/consolidation`} className="text-blue-700 hover:underline">
+          Download as a printable PDF →
+        </a>{' '}
+        <span className="text-xs text-gray-600">
+          (add <code>?semester=3</code> or <code>?batch=2024–2027</code> to narrow it)
+        </span>
+      </p>
     </div>
   );
 }

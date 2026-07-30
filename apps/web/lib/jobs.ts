@@ -17,7 +17,11 @@ import { meanAcrossCourses, type CoursePoRow, type PoMeanCell } from './consolid
  * started again.
  */
 
-export type JobKind = 'PROGRAMME_CONSOLIDATION' | 'INSTITUTION_CONSOLIDATION';
+export type JobKind =
+  | 'PROGRAMME_CONSOLIDATION'
+  | 'INSTITUTION_CONSOLIDATION'
+  | 'ACCREDITATION_BUNDLE'
+  | 'INSTITUTIONAL_EXPORT';
 
 export interface ConsolidationResult {
   scopeLabel: string;
@@ -47,16 +51,44 @@ async function setProgress(jobId: string, progress: number, note: string): Promi
   await prisma.job.update({ where: { id: jobId }, data: { progress, progressNote: note } });
 }
 
-async function runJob(jobId: string): Promise<void> {
+/**
+ * Runs (or resumes) a job. A PENDING job starts; a FAILED one may be
+ * restarted, which for the accreditation bundle picks up where the last
+ * attempt stopped because every finished PDF is already on disk (NFR-4).
+ */
+export async function runJob(jobId: string, allowRestart = false): Promise<void> {
   const job = await prisma.job.findUniqueOrThrow({ where: { id: jobId } });
-  if (job.status !== 'PENDING') return;
-  await prisma.job.update({ where: { id: jobId }, data: { status: 'RUNNING', startedAt: new Date(), progress: 0 } });
+  if (job.status === 'RUNNING' || job.status === 'COMPLETED') return;
+  if (job.status !== 'PENDING' && !allowRestart) return;
+  await prisma.job.update({
+    where: { id: jobId },
+    data: { status: 'RUNNING', startedAt: new Date(), progress: 0, error: null },
+  });
 
-  const payload = job.payload as { programmeId?: string };
-  const result =
-    job.kind === 'PROGRAMME_CONSOLIDATION'
-      ? await consolidateProgramme(jobId, payload.programmeId!)
-      : await consolidateInstitution(jobId);
+  const payload = job.payload as { programmeId?: string; semester?: number; batchName?: string };
+  let result: unknown;
+  if (job.kind === 'PROGRAMME_CONSOLIDATION') {
+    result = await consolidateProgramme(jobId, payload.programmeId!);
+  } else if (job.kind === 'INSTITUTION_CONSOLIDATION') {
+    result = await consolidateInstitution(jobId);
+  } else if (job.kind === 'INSTITUTIONAL_EXPORT') {
+    const { runDataExport } = await import('./dataExport');
+    result = await runDataExport(jobId, async (done, total, note) => {
+      await setProgress(jobId, Math.round((done / Math.max(total, 1)) * 100), note);
+    });
+  } else {
+    const { runBundle } = await import('./bundle');
+    result = await runBundle(
+      jobId,
+      {
+        ...(payload.semester !== undefined ? { semester: payload.semester } : {}),
+        ...(payload.batchName !== undefined ? { batchName: payload.batchName } : {}),
+      },
+      async (done, total, note) => {
+        await setProgress(jobId, Math.round((done / Math.max(total, 1)) * 100), note);
+      },
+    );
+  }
 
   await prisma.job.update({
     where: { id: jobId },

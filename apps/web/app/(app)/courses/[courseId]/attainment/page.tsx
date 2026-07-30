@@ -58,7 +58,16 @@ export default async function AttainmentPage({ params }: { params: Promise<{ cou
         ) : (
           <span className="text-xs text-gray-600">computed just now from the current marks</span>
         )}
-        <Link href={`/courses/${courseId}/versions`} className="text-xs text-blue-700 hover:underline ml-auto">
+        <a
+          href={`/api/courses/${courseId}/report`}
+          className="text-xs border border-gray-300 rounded px-2 py-1 hover:bg-gray-100 ml-auto"
+        >
+          PDF report
+        </a>
+        <a href={`/api/courses/${courseId}/export`} className="text-xs border border-gray-300 rounded px-2 py-1 hover:bg-gray-100">
+          Export to Excel
+        </a>
+        <Link href={`/courses/${courseId}/versions`} className="text-xs text-blue-700 hover:underline">
           Version history →
         </Link>
       </div>

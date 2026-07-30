@@ -1,0 +1,26 @@
+{
+  "name": "@copo/export",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Excel export of a course's attainment in the departmental workbook layout. Live formulas for reading; the engine's numbers are the source of truth.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@copo/engine": "*",
+    "exceljs": "^4.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.2.0"
+  }
+}
