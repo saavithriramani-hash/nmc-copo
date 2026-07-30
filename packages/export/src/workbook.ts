@@ -137,14 +137,31 @@ function buildCoverSheet(workbook: ExcelJS.Workbook, data: ExportInput): void {
   line('Engine version', data.course.engineVersion);
   line('Generated', data.course.generatedAt.toISOString());
 
-  row += 1;
-  const warnings = data.result.warnings;
-  setTitle(sheet, row, warnings.length === 0 ? 'Computed with no warnings' : `Computed with ${warnings.length} warning(s)`);
-  row += 1;
-  for (const warning of warnings) {
-    setValue(sheet, 1, row, warning.code);
-    setValue(sheet, 2, row, warning.message);
+  // Computation warnings are deliberately NOT exported: they are working
+  // notes for the person preparing the course and are shown in the
+  // application, not in the filed workbook.
+  //
+  // The one fact §5.1 requires the report itself to state is disclosed
+  // here as method rather than as a warning: a declared weight group that
+  // nothing assessed has its weight redistributed. (A CO with no feedback
+  // already reads "direct-only" on the final-CO sheet.)
+  const redistributed = [
+    ...new Map(
+      data.result.finalCo
+        .flatMap((co) => co.groupTerms)
+        .filter((term) => term.weightUsed !== term.declaredWeight)
+        .map((term) => [term.groupId, term] as const),
+    ).values(),
+  ];
+  if (redistributed.length > 0) {
     row += 1;
+    setTitle(sheet, row, 'Weight redistribution (§5.1)');
+    row += 1;
+    for (const term of redistributed) {
+      setValue(sheet, 1, row, term.groupId);
+      setValue(sheet, 2, row, `declared ${term.declaredWeight}, applied ${term.weightUsed} — no assessment belongs to this group`);
+      row += 1;
+    }
   }
 
   row += 1;

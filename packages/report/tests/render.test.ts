@@ -93,6 +93,35 @@ describe('course report (FR-19)', () => {
 
     const buffer = await renderCourseReport(data);
     expect(inspectPdf(buffer).valid).toBe(true);
+
+    // Warnings are working notes for the person preparing the course and
+    // are shown in the application, NOT on the filed document.
+    const text = extractText(buffer);
+    expect(text).not.toContain('Computation warnings');
+    for (const warning of data.result.warnings) {
+      expect(text, `warning code ${warning.code} must not be printed`).not.toContain(warning.code);
+    }
+
+    // …but the fact §5.1 requires the REPORT to state survives, as method
+    // rather than as a warning.
+    expect(text).toContain('direct-only');
+  });
+
+  it('states weight redistribution on the report even though warnings are not printed (§5.1)', async () => {
+    const data = buildCourseReportData();
+    // Declare a group nothing is assessed under, so its weight must be
+    // redistributed — a fact the report itself has to disclose.
+    data.input.parameters = {
+      ...data.input.parameters,
+      weightGroups: { ...data.input.parameters.weightGroups, practical: 0.2, external: 0.5 },
+    };
+    const { computeCourse } = await import('@copo/engine');
+    data.result = computeCourse(data.input);
+
+    const text = extractText(await renderCourseReport(data));
+    expect(text).toContain('Weight redistribution');
+    expect(text).toContain('practical');
+    expect(text).not.toContain('EMPTY_WEIGHT_GROUP'); // the warning code itself stays out
   });
 
   it('renders a live (unlocked) course without a snapshot version', async () => {

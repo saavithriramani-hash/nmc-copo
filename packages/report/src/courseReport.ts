@@ -53,13 +53,6 @@ export async function renderCourseReport(data: CourseReportData): Promise<Buffer
   }
 
 
-  if (result.warnings.length > 0) {
-    doc.paragraph(
-      `This course was computed with ${result.warnings.length} warning(s); each is listed in section 8. Every warning has a defined result behind it — no figure was silently set to zero.`,
-      { size: SIZE.small, color: COLOR.barBelow },
-    );
-  }
-
   // ── 2. Course outcomes ──
   doc.heading('2. Course outcomes');
   doc.table(
@@ -192,6 +185,29 @@ export async function renderCourseReport(data: CourseReportData): Promise<Buffer
     { size: SIZE.small, color: COLOR.muted, italic: true },
   );
 
+  // §5.1 requires the REPORT to say when a weight group's declared weight
+  // was redistributed because nothing assessed it. Stated here as method,
+  // not as a warning, so the disclosure survives independently of the
+  // working notes shown in the application.
+  const redistributed = [
+    ...new Map(
+      result.finalCo
+        .flatMap((co) => co.groupTerms)
+        .filter((term) => term.weightUsed !== term.declaredWeight)
+        .map((term) => [term.groupId, term] as const),
+    ).values(),
+  ];
+  if (redistributed.length > 0) {
+    doc.paragraph(
+      'Weight redistribution (§5.1): ' +
+        redistributed
+          .map((term) => `“${term.groupId}” declared ${term.declaredWeight}, applied ${fmt(term.weightUsed, 3)}`)
+          .join('; ') +
+        '. A declared group that no assessment belongs to has its weight shared proportionally across the groups that were assessed, so the weights still sum to 1.',
+      { size: SIZE.small, color: COLOR.muted, italic: true },
+    );
+  }
+
   // CO bar chart with the target rule.
   doc.ensure(190);
   const target = result.parameters.targetAttainment;
@@ -302,17 +318,14 @@ export async function renderCourseReport(data: CourseReportData): Promise<Buffer
   doc.paragraph('Action plan for the next cycle (to be completed by the course faculty):', { size: SIZE.subheading });
   doc.ruledLines(6);
 
-  // ── 8. Warnings ──
-  if (result.warnings.length > 0) {
-    doc.heading('8. Computation warnings');
-    doc.table(
-      [
-        { header: 'Code', width: 130 },
-        { header: 'Detail', width: 340, small: true },
-      ],
-      result.warnings.map((warning) => [{ text: warning.code, bold: true }, warning.message]),
-    );
-  }
+  // Computation warnings are deliberately NOT printed: they are working
+  // notes for the person preparing the course and are shown in the
+  // application, not on the filed document.
+  //
+  // The two facts §5.1 requires the REPORT itself to state are disclosed
+  // as method, not as warnings: a CO with no feedback reads "direct-only"
+  // in the attainment table above, and a redistributed weight group is
+  // stated beneath the weights there.
 
   doc.space(6);
   doc.signatures(['Course faculty', 'Head of the Department', 'IQAC']);
