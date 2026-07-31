@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { BulkAccountImport } from '@/components/BulkAccountImport';
 import { UserAdmin, type ScopeOption, type UserView } from '@/components/UserAdmin';
 import { guard } from '@/lib/authz';
 import { prisma } from '@/lib/db';
@@ -76,6 +77,8 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
           log.
         </p>
       </div>
+
+      <BulkAccountImport />
 
       <form className="flex gap-2 max-w-md">
         <input

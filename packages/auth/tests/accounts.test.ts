@@ -26,9 +26,13 @@ import { FakePrisma } from './fixtures/fakePrisma';
  */
 
 class FakeDbContextSource implements ContextSource {
+  /** How many times the Guard has loaded an actor — see the bulk tests. */
+  actorLoads = 0;
+
   constructor(private readonly db: FakePrisma) {}
 
   async getActor(userId: string, at: Date): Promise<ActorContext | null> {
+    this.actorLoads += 1;
     const user = this.db.users.find((u) => u.id === userId);
     if (!user) return null;
     return {
@@ -59,11 +63,13 @@ let accounts: AccountService;
 let rolesService: RoleService;
 let auth: AuthService;
 let sessions: SessionService;
+let contextSource: FakeDbContextSource;
 
 beforeEach(async () => {
   db = new FakePrisma();
   audit = new MemoryAuditSink();
-  const guard = new Guard(new FakeDbContextSource(db), audit);
+  contextSource = new FakeDbContextSource(db);
+  const guard = new Guard(contextSource, audit);
   sessions = new SessionService(db.asClient());
   accounts = new AccountService(db.asClient(), guard, sessions, audit);
   rolesService = new RoleService(db.asClient(), guard, audit);
@@ -289,5 +295,98 @@ describe('Google Workspace migration path (§2.1)', () => {
     await expect(
       relinkIdentityByEmail(db.asClient(), audit, { email: 'ghost@nmc.dev', toProvider: 'GOOGLE', actorId: null }),
     ).rejects.toThrow(/never creates accounts/);
+  });
+});
+
+describe('bulk account creation (import)', () => {
+  const batch = [
+    { email: 'Ravi@NMC.dev', fullName: 'Ravi Kumar' },
+    { email: 'meena@nmc.dev', fullName: 'Meena S' },
+    { email: 'anand@nmc.dev', fullName: 'Anand P' },
+  ];
+
+  it('creates every account, normalising the address and forcing a first-login change', async () => {
+    const created = await accounts.createUsers('admin-1', batch);
+
+    expect(created.map((c) => c.email)).toEqual(['ravi@nmc.dev', 'meena@nmc.dev', 'anand@nmc.dev']);
+    for (const account of created) {
+      const row = db.users.find((u) => u.id === account.userId)!;
+      expect(row.mustChangePassword).toBe(true);
+      expect(row.isActive).toBe(true);
+      expect(row.identityProvider).toBe('LOCAL');
+      // The plaintext is returned once and never stored.
+      expect(row.passwordHash).not.toBe(account.temporaryPassword);
+      await expect(verifyPassword(row.passwordHash!, account.temporaryPassword)).resolves.toBe(true);
+    }
+  });
+
+  it('returns results in input order, so each password reaches the right person', async () => {
+    const created = await accounts.createUsers('admin-1', batch);
+    expect(created.map((c) => c.fullName)).toEqual(['Ravi Kumar', 'Meena S', 'Anand P']);
+  });
+
+  it('gives every account a DIFFERENT temporary password', async () => {
+    const created = await accounts.createUsers('admin-1', batch);
+    expect(new Set(created.map((c) => c.temporaryPassword)).size).toBe(batch.length);
+  });
+
+  it('authorises ONCE for the whole batch, not once per account', async () => {
+    // The reason this method exists rather than a loop over createUser:
+    // re-deciding an unchanging permission per account is pure overhead.
+    const before = contextSource.actorLoads;
+    await accounts.createUsers('admin-1', batch);
+    expect(contextSource.actorLoads - before).toBe(1);
+  });
+
+  it('writes one USER_CREATED entry per account (FR-17)', async () => {
+    await accounts.createUsers('admin-1', batch);
+    const entries = audit.events.filter((e) => e.action === 'USER_CREATED');
+    expect(entries).toHaveLength(3);
+    expect(entries.every((e) => e.actorId === 'admin-1')).toBe(true);
+    // Recognisable as an import when the log is read later.
+    expect(entries.every((e) => (e.after as { viaBulkImport?: boolean }).viaBulkImport === true)).toBe(true);
+  });
+
+  it('refuses the whole batch to an account without users.manage', async () => {
+    db.users.push({
+      id: 'faculty-1',
+      email: 'faculty@nmc.dev',
+      fullName: 'Course Faculty',
+      identityProvider: 'LOCAL',
+      passwordHash: await hashPassword('Faculty-Pass-2026'),
+      mustChangePassword: false,
+      isActive: true,
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+    db.rolesTable.push({
+      id: 'role-faculty-1',
+      userId: 'faculty-1',
+      kind: 'FACULTY',
+      departmentId: null,
+      effectiveFrom: new Date('2024-01-01T00:00:00Z'),
+      effectiveTo: null,
+    });
+
+    await expect(accounts.createUsers('faculty-1', batch)).rejects.toThrow(AuthzDeniedError);
+    expect(db.users.filter((u) => u.email.endsWith('@nmc.dev')).map((u) => u.email)).not.toContain('ravi@nmc.dev');
+  });
+
+  it('does nothing at all for an empty batch', async () => {
+    const before = db.users.length;
+    await expect(accounts.createUsers('admin-1', [])).resolves.toEqual([]);
+    expect(db.users).toHaveLength(before);
+    expect(audit.events.filter((e) => e.action === 'USER_CREATED')).toHaveLength(0);
+  });
+
+  it('rejects a batch containing an address that already exists', async () => {
+    // NOTE: this asserts the failure, not the rollback. Undoing the
+    // partial batch is PostgreSQL's job via $transaction; the in-memory
+    // fake cannot model it, so atomicity is exercised against the real
+    // database rather than claimed here.
+    await accounts.createUsers('admin-1', [{ email: 'ravi@nmc.dev', fullName: 'Ravi Kumar' }]);
+    await expect(
+      accounts.createUsers('admin-1', [{ email: 'ravi@nmc.dev', fullName: 'Ravi Again' }]),
+    ).rejects.toThrow(/duplicate email/i);
   });
 });

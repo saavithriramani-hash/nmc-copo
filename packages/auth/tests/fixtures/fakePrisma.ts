@@ -48,6 +48,17 @@ export class FakePrisma {
   rolesTable: RoleRow[] = [];
   sessionUpdateCalls = 0;
 
+  /**
+   * Array form only, which is what AccountService.createUsers uses.
+   *
+   * This models the ordering and the return shape, NOT rollback: the
+   * fake's create() executes when it is called, so by the time the array
+   * reaches here the rows are already in. Transactional atomicity is
+   * PostgreSQL's guarantee and is exercised against the real database,
+   * not asserted here — see the note in accounts.test.ts.
+   */
+  $transaction = async <T>(operations: readonly Promise<T>[]): Promise<T[]> => Promise.all(operations);
+
   readonly user = {
     findUnique: async ({ where }: { where: { id?: string; email?: string } }): Promise<UserRow | null> => {
       if (where.id !== undefined) return this.users.find((u) => u.id === where.id) ?? null;
@@ -55,6 +66,11 @@ export class FakePrisma {
       throw new Error('fake user.findUnique: unsupported where');
     },
     create: async ({ data }: { data: Omit<UserRow, 'id' | 'createdAt' | 'updatedAt'> }): Promise<UserRow> => {
+      // The database has a unique index on email; the fake enforces it so
+      // a test cannot pass on a duplicate the real schema would refuse.
+      if (this.users.some((u) => u.email === data.email)) {
+        throw new Error(`fake user.create: duplicate email ${data.email}`);
+      }
       const row: UserRow = { id: `u-${randomUUID()}`, createdAt: new Date(), updatedAt: new Date(), ...data };
       this.users.push(row);
       return row;

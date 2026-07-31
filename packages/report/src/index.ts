@@ -12,6 +12,13 @@
 export { renderCourseReport } from './courseReport';
 export { renderProgrammeConsolidation, renderInstitutionConsolidation } from './consolidationReport';
 export { renderAppendix } from './appendix';
+export {
+  renderAccountSlips,
+  type AccountSlip,
+  type AccountSlipsData,
+  type RejectedRow,
+  type SkippedRow,
+} from './accountSlips';
 export { ReportDoc } from './doc';
 export { analyseGaps, type GapAnalysis, type GapRow } from './gap';
 export {

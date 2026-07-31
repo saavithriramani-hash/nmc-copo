@@ -61,6 +61,89 @@ export class AccountService {
   }
 
   /**
+   * Administrator creates many accounts at once (bulk import).
+   *
+   * Deliberately not a loop over createUser. Three things differ, and
+   * each of them is the reason this method exists:
+   *
+   * 1. **Authorised once.** createUser calls guard.require per account,
+   *    which reloads the actor's roles from the database every time.
+   *    Several hundred of those is several hundred needless round trips
+   *    for a decision that cannot change mid-import.
+   *
+   * 2. **Hashing happens OUTSIDE the transaction.** Argon2id is
+   *    deliberately expensive; hashing inside would hold a write
+   *    transaction open for the whole run. Hashes are computed first,
+   *    then the rows are inserted together — so either every account in
+   *    the batch exists or none does, and the transaction is short.
+   *
+   * 3. **Ordered results.** The caller has to hand each password to the
+   *    right person, so the returned array is in input order and carries
+   *    the plaintext exactly once. It is never stored: no job row, no
+   *    file on disk, nothing to leak later.
+   *
+   * `emails` are normalised and must already be unique within the batch
+   * and absent from the database — the caller previews that. A clash
+   * that slips through (someone created the address meanwhile) fails the
+   * whole transaction rather than creating a partial batch whose
+   * passwords the administrator would never see.
+   */
+  async createUsers(
+    actorId: string,
+    accounts: readonly { email: string; fullName: string }[],
+  ): Promise<{ userId: string; email: string; fullName: string; temporaryPassword: string }[]> {
+    await this.guard.require(actorId, { type: 'users.manage' });
+    if (accounts.length === 0) return [];
+
+    const prepared = await Promise.all(
+      accounts.map(async (account) => {
+        const temporaryPassword = generateTemporaryPassword();
+        return {
+          email: normaliseEmail(account.email),
+          fullName: account.fullName,
+          temporaryPassword,
+          passwordHash: await hashPassword(temporaryPassword),
+        };
+      }),
+    );
+
+    const created = await this.prisma.$transaction(
+      prepared.map((row) =>
+        this.prisma.user.create({
+          data: {
+            email: row.email,
+            fullName: row.fullName,
+            identityProvider: 'LOCAL',
+            passwordHash: row.passwordHash,
+            mustChangePassword: true,
+            isActive: true,
+          },
+          select: { id: true },
+        }),
+      ),
+    );
+
+    // One entry per account (FR-17): a bulk import must be as readable in
+    // the audit log as the same accounts created one at a time.
+    for (const [index, row] of prepared.entries()) {
+      await this.audit.record({
+        action: 'USER_CREATED',
+        actorId,
+        entityType: 'User',
+        entityId: created[index]!.id,
+        after: { email: row.email, fullName: row.fullName, identityProvider: 'LOCAL', viaBulkImport: true },
+      });
+    }
+
+    return prepared.map((row, index) => ({
+      userId: created[index]!.id,
+      email: row.email,
+      fullName: row.fullName,
+      temporaryPassword: row.temporaryPassword,
+    }));
+  }
+
+  /**
    * Administrator-initiated reset: issues a new temporary password,
    * forces a change at next login, and logs the user out everywhere.
    */
