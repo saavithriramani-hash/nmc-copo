@@ -152,7 +152,9 @@ export function MatrixGrid({
           <thead>
             <tr className="bg-gray-100">
               <th className="border border-gray-300 px-2 py-1 text-left" rowSpan={2}>CO</th>
-              {poGroup.length > 0 ? <th className="border border-gray-300 px-2 py-1" colSpan={poGroup.length}>Programme outcomes</th> : null}
+              {/* "POs", not "Programme outcomes": it sits beside "PSOs",
+                  and every column beneath it is already labelled PO1…POn. */}
+              {poGroup.length > 0 ? <th className="border border-gray-300 px-2 py-1" colSpan={poGroup.length}>POs</th> : null}
               {psoGroup.length > 0 ? <th className="border border-gray-300 px-2 py-1" colSpan={psoGroup.length}>PSOs</th> : null}
             </tr>
             <tr className="bg-gray-100">
@@ -191,8 +193,14 @@ export function MatrixGrid({
           </tbody>
           <tfoot>
             <tr className="bg-blue-50">
-              <td className="border border-gray-300 px-2 py-1 text-xs font-medium">
-                Weightage <span className="font-normal text-gray-600">(mean of mapped strengths — engine Step 1, live)</span>
+              {/*
+                Label only. The provenance of this row is stated in the
+                legend above the table, not here: this cell shares a
+                column with "CO1", and a sentence in it stretched that
+                column past every code it holds.
+              */}
+              <td className="border border-gray-300 px-2 py-1 text-xs font-medium whitespace-nowrap">
+                Weightage
               </td>
               {ordered.map((po) => {
                 const weight = weightages.get(po.id);

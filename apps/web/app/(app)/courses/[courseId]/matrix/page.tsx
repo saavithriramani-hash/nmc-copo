@@ -31,7 +31,10 @@ export default async function MatrixPage({ params }: { params: Promise<{ courseI
   return (
     <div className="space-y-2 max-w-full">
       <h2 className="font-medium">CO ↔ PO/PSO articulation matrix</h2>
-      <p className="text-xs text-gray-600">1 = low, 2 = medium, 3 = high correlation. Blank = unmapped.</p>
+      <p className="text-xs text-gray-600">
+        1 = low, 2 = medium, 3 = high correlation. Blank = unmapped. The weightage row is the mean of the strengths
+        mapped to each outcome — engine Step 1, recomputed live as you type.
+      </p>
       <MatrixGrid
         courseId={courseId}
         canEdit={canEdit}
