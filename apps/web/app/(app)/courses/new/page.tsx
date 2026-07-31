@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { createCourseAction } from '@/actions/course';
+import { FacultyPicker } from '@/components/FacultyPicker';
 import { prisma } from '@/lib/db';
 import { requireSession } from '@/lib/session';
 
@@ -57,17 +58,20 @@ export default async function NewCoursePage({ searchParams }: { searchParams: Pr
               <span className="block text-xs font-medium text-gray-700 mb-1">Credits (optional)</span>
               <input name="credits" type="number" step="0.5" min={0} className="w-full border border-gray-300 rounded px-2 py-1.5" />
             </label>
-            <label className="block">
+            <div>
               <span className="block text-xs font-medium text-gray-700 mb-1">Assigned faculty</span>
-              <select name="instructorId" className="w-full border border-gray-300 rounded px-2 py-1.5">
-                <option value="">— assign later —</option>
-                {facultyUsers.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.fullName} ({f.email})
-                  </option>
-                ))}
-              </select>
-            </label>
+              {/* A searchable picker rather than a <select>: a college
+                  runs to ~200 active faculty, which no dropdown makes
+                  navigable. Optional here — a course may be staffed
+                  later on its details tab. */}
+              <FacultyPicker
+                name="instructorId"
+                submit="id"
+                options={facultyUsers}
+                emptyOptionLabel="— assign later —"
+                placeholder="Search name or email…"
+              />
+            </div>
           </div>
           <button type="submit" className="bg-blue-700 text-white rounded px-3 py-1.5 hover:bg-blue-800">Create course</button>
         </form>

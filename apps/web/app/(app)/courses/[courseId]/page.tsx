@@ -1,6 +1,8 @@
 import { addInstructorAction, removeInstructorAction, updateCourseDetailsAction } from '@/actions/course';
+import { AddInstructorForm } from '@/components/AddInstructorForm';
 import { guard } from '@/lib/authz';
 import { prisma } from '@/lib/db';
+import { excludeAssigned } from '@/lib/facultySearch';
 import { requireSession } from '@/lib/session';
 
 export default async function CourseDetailsPage({
@@ -24,6 +26,20 @@ export default async function CourseDetailsPage({
 
   const updateAction = updateCourseDetailsAction.bind(null, courseId);
   const addAction = addInstructorAction.bind(null, courseId);
+
+  // Only offered when the viewer may actually staff the course: the list
+  // of every faculty member in the college is not something a course's
+  // own faculty needs, and the picker is hidden from them anyway.
+  const assignableFaculty = canStaff
+    ? excludeAssigned(
+        await prisma.user.findMany({
+          where: { isActive: true, roles: { some: { kind: 'FACULTY', effectiveTo: null } } },
+          select: { id: true, fullName: true, email: true },
+          orderBy: { fullName: 'asc' },
+        }),
+        course.instructors.map((instructor) => instructor.userId),
+      )
+    : [];
 
   return (
     <div className="space-y-6 max-w-2xl">
@@ -82,10 +98,7 @@ export default async function CourseDetailsPage({
           </tbody>
         </table>
         {canStaff ? (
-          <form action={addAction} className="flex gap-2 max-w-md">
-            <input name="email" type="email" required placeholder="faculty email address" className="flex-1 border border-gray-300 rounded px-2 py-1" />
-            <button type="submit" className="border border-gray-300 rounded px-2 py-1 hover:bg-gray-100">Add faculty</button>
-          </form>
+          <AddInstructorForm action={addAction} options={assignableFaculty} />
         ) : (
           <p className="text-xs text-gray-500">
             Who teaches this course is set by the Head of Department (FR-4).
