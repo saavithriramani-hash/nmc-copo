@@ -153,6 +153,9 @@ export function StructureEditor({ assessmentId, shape, canEdit, cos, weightGroup
       <thead>
         <tr className="bg-gray-50 text-left text-xs">
           <th className="border border-gray-300 px-2 py-1">Question / item</th>
+          {/* SINGULAR, and deliberately: this is what ONE question is
+              worth. Totals — the paper's maximum, the single-score
+              figure, the assessments list — read "Maximum marks". */}
           <th className="border border-gray-300 px-2 py-1 w-24">Max mark</th>
           <th className="border border-gray-300 px-2 py-1 w-40">CO tag</th>
           <th className="border border-gray-300 px-2 py-1 w-20"></th>
@@ -228,7 +231,10 @@ export function StructureEditor({ assessmentId, shape, canEdit, cos, weightGroup
               </select>
             </label>
             <label className="block">
-              <span className="block text-xs font-medium text-gray-700 mb-1">Maximum mark</span>
+              {/* The single-score paper's total — plural, like the
+                  assessments list. The per-question column below stays
+                  singular; see the note on that header. */}
+              <span className="block text-xs font-medium text-gray-700 mb-1">Maximum marks</span>
               <input type="number" step="0.5" min={0.5} value={singleMaxMark} onChange={(e) => { setSingleMaxMark(Number(e.target.value)); touch(); }} className="border border-gray-300 rounded px-2 py-1.5 w-28 text-right" />
             </label>
           </>
@@ -336,7 +342,7 @@ export function StructureEditor({ assessmentId, shape, canEdit, cos, weightGroup
       ) : null}
 
       <div className="bg-blue-50 border border-blue-200 rounded px-3 py-2 text-sm">
-        Maximum mark: <strong>{formatMark(maxima.obtainableMax)}</strong>
+        Maximum marks: <strong>{formatMark(maxima.obtainableMax)}</strong>
         {maxima.hasOptionalSections ? (
           <span className="text-xs text-gray-600">
             {' '}

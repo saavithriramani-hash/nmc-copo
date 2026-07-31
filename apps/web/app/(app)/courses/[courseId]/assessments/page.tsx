@@ -132,8 +132,17 @@ export default async function AssessmentsPage({
                 <th className="border border-gray-300 px-2 py-1">Weight group</th>
                 <th className="border border-gray-300 px-2 py-1">Sections</th>
                 <th className="border border-gray-300 px-2 py-1">Items</th>
-                <th className="border border-gray-300 px-2 py-1 text-right">Maximum</th>
-                <th className="border border-gray-300 px-2 py-1 w-24"></th>
+                {/* PLURAL here, singular in the structure editor, and the
+                    difference is real: this is a paper's total, which
+                    every Indian question paper prints as "Maximum Marks",
+                    whereas an Item's `maxMark` is what one question is
+                    worth. Do not "correct" one to match the other. */}
+                <th className="border border-gray-300 px-2 py-1 text-right">Maximum marks</th>
+                {/* No heading needed — every cell below carries a button
+                    that labels itself. The column is present ONLY for a
+                    viewer who could act on some row; read-only viewers
+                    used to get an unexplained empty column. */}
+                {canWrite ? <th className="border border-gray-300 px-2 py-1 w-24"></th> : null}
               </tr>
             </thead>
             <tbody>
@@ -168,13 +177,38 @@ export default async function AssessmentsPage({
                       formatMark(maxima.obtainableMax)
                     )}
                   </td>
-                  <td className="border border-gray-300 px-2 py-1 text-center">
-                    {canWrite && assessment._count.markValues === 0 ? (
-                      <form action={deleteAssessmentAction.bind(null, courseId, assessment.id)}>
-                        <button type="submit" className="text-red-700 hover:underline">delete</button>
-                      </form>
-                    ) : null}
-                  </td>
+                  {/* An assessment with marks against it is deliberately
+                      undeletable: removing it would destroy student data
+                      and silently change every CO and PO figure derived
+                      from it. Say so, rather than leaving a blank cell
+                      that reads as a missing feature. */}
+                  {canWrite ? (
+                    <td className="border border-gray-300 px-2 py-1 text-center">
+                      {assessment._count.markValues === 0 ? (
+                        <form action={deleteAssessmentAction.bind(null, courseId, assessment.id)}>
+                          <button type="submit" className="text-red-700 hover:underline">delete</button>
+                        </form>
+                      ) : (
+                        /* The same control, greyed out rather than absent
+                           or replaced by prose: the row still shows what
+                           the action WOULD be, and why it is unavailable.
+                           An assessment carrying marks is deliberately
+                           undeletable — removing it would destroy student
+                           data and change every figure derived from it.
+                           The count goes in the tooltip, where it belongs
+                           as an explanation rather than as a column of
+                           numbers competing with the maximum beside it. */
+                        <button
+                          type="button"
+                          disabled
+                          title={`Cannot delete: ${assessment._count.markValues} mark${assessment._count.markValues === 1 ? ' has' : 's have'} been recorded against this assessment. Deleting it would destroy them and change every figure computed from them — clear its marks first.`}
+                          className="text-gray-400 cursor-not-allowed"
+                        >
+                          delete
+                        </button>
+                      )}
+                    </td>
+                  ) : null}
                 </tr>
                 );
               })}
@@ -219,7 +253,10 @@ export default async function AssessmentsPage({
               </select>
             </label>
             <label className="block">
-              <span className="block text-xs font-medium text-gray-700 mb-1">Max mark (single score)</span>
+              {/* Plural: a single-score assessment IS the paper, so this
+                  is its total — the end-semester paper's 75, not one
+                  question's worth. */}
+              <span className="block text-xs font-medium text-gray-700 mb-1">Maximum marks (single score)</span>
               <input name="maxMark" type="number" step="0.5" min={0} placeholder="75" className="border border-gray-300 rounded px-2 py-1.5 w-28" />
             </label>
             <button type="submit" className="bg-blue-700 text-white rounded px-3 py-1.5 hover:bg-blue-800">Add</button>

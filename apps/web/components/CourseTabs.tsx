@@ -39,10 +39,17 @@ export function CourseTabs({ tabs, basePath }: { tabs: CourseTab[]; basePath: st
     // `whitespace-nowrap` keeps each label on one line — two-line tabs
     // doubled the height of the bar on every course page. If eleven tabs
     // still will not fit, the bar scrolls rather than wrapping.
+    // `w-fit` so the bottom rule stops at the last tab instead of
+    // running on across the empty width beside it. `max-w-full` keeps
+    // that compatible with the scroll behaviour on a narrow screen.
+    //
     // Named, because the application shell renders a <nav> of its own:
     // two unlabelled navigations on one page are indistinguishable to a
     // screen reader.
-    <nav aria-label="Course sections" className="border-b border-gray-300 flex gap-0.5 overflow-x-auto">
+    <nav
+      aria-label="Course sections"
+      className="border-b border-gray-300 flex gap-0.5 overflow-x-auto w-fit max-w-full"
+    >
       {tabs.map((tab) => {
         const active = isActive(tab.href);
         const pending = target === tab.href && !active;

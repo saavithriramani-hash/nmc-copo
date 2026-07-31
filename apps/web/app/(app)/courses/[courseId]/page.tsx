@@ -47,27 +47,39 @@ export default async function CourseDetailsPage({
 
       <section className="space-y-2">
         <h2 className="font-medium">Details</h2>
-        <form action={updateAction} className="bg-white border border-gray-300 rounded p-4 grid grid-cols-2 gap-3">
+        {/*
+          Flex rather than a two-column grid: every field is sized to
+          what it actually holds, and the button sits directly after the
+          last one instead of being pushed to the far side of a column it
+          never needed. The card is only as wide as the longest field.
+        */}
+        <form
+          action={updateAction}
+          className="bg-white border border-gray-300 rounded p-4 flex flex-wrap items-end gap-x-3 gap-y-2 max-w-xl"
+        >
           <label className="block">
             <span className="block text-xs font-medium text-gray-700 mb-1">Code</span>
-            <input name="code" defaultValue={course.code} required disabled={!canWrite} className="w-full border border-gray-300 rounded px-2 py-1.5 disabled:bg-gray-100" />
+            <input name="code" defaultValue={course.code} required disabled={!canWrite} className="w-40 border border-gray-300 rounded px-2 py-1.5 disabled:bg-gray-100" />
           </label>
           <label className="block">
             <span className="block text-xs font-medium text-gray-700 mb-1">Semester</span>
-            <input name="semester" type="number" min={1} max={12} defaultValue={course.semester} required disabled={!canWrite} className="w-full border border-gray-300 rounded px-2 py-1.5 disabled:bg-gray-100" />
-          </label>
-          <label className="block col-span-2">
-            <span className="block text-xs font-medium text-gray-700 mb-1">Title</span>
-            <input name="title" defaultValue={course.title} required disabled={!canWrite} className="w-full border border-gray-300 rounded px-2 py-1.5 disabled:bg-gray-100" />
+            {/* One or two digits. A wide box invites the reader to expect
+                a long value. */}
+            <input name="semester" type="number" min={1} max={12} defaultValue={course.semester} required disabled={!canWrite} className="w-16 border border-gray-300 rounded px-2 py-1.5 disabled:bg-gray-100" />
           </label>
           <label className="block">
             <span className="block text-xs font-medium text-gray-700 mb-1">Credits</span>
-            <input name="credits" type="number" step="0.5" min={0} defaultValue={course.credits?.toString() ?? ''} disabled={!canWrite} className="w-full border border-gray-300 rounded px-2 py-1.5 disabled:bg-gray-100" />
+            {/* Wider than Semester only because it takes halves: "4.5". */}
+            <input name="credits" type="number" step="0.5" min={0} defaultValue={course.credits?.toString() ?? ''} disabled={!canWrite} className="w-20 border border-gray-300 rounded px-2 py-1.5 disabled:bg-gray-100" />
+          </label>
+          {/* `w-full` breaks the line: the title is the one free-text
+              field and gets the row to itself. */}
+          <label className="block w-full">
+            <span className="block text-xs font-medium text-gray-700 mb-1">Title</span>
+            <input name="title" defaultValue={course.title} required disabled={!canWrite} className="w-full border border-gray-300 rounded px-2 py-1.5 disabled:bg-gray-100" />
           </label>
           {canWrite ? (
-            <div className="flex items-end">
-              <button type="submit" className="bg-blue-700 text-white rounded px-3 py-1.5 hover:bg-blue-800">Save details</button>
-            </div>
+            <button type="submit" className="bg-blue-700 text-white rounded px-3 py-1.5 hover:bg-blue-800">Save details</button>
           ) : null}
         </form>
         {!canWrite ? <p className="text-xs text-gray-500">Read-only: course setup is edited by its faculty while in DRAFT, or by the HoD.</p> : null}
