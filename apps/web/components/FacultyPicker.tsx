@@ -122,13 +122,53 @@ export function FacultyPicker({
           </button>
         </div>
       ) : (
+        /*
+         * The browser must not suggest anything here. Its saved
+         * addresses are noise on top of the list we are already
+         * showing, and the overlay covers our own results — the one
+         * thing the user is looking at.
+         *
+         * `autocomplete="off"` does NOT achieve that, and not by
+         * accident: Chrome deliberately ignores it for fields its
+         * heuristics classify as contact details, on the grounds that
+         * sites were overusing it. This field is classified that way
+         * because its placeholder offers to search by email.
+         *
+         * `new-password` is the lever that works. It is a token from a
+         * different autofill scope, so Chrome has no address data to
+         * offer against it, and it suppresses the popup where "off" is
+         * discarded. It is a known idiom rather than a clean one — if a
+         * future version honours "off" for contact fields, this can go
+         * back to it.
+         *
+         * Around it:
+         *  - NO `name` attribute. That is what stops browsers recording
+         *    and replaying form history for the field, and it is also
+         *    why nothing extra is posted: the hidden input above
+         *    carries the value the server action reads.
+         *  - The data-* opt-outs are a SEPARATE problem — password
+         *    managers ignore the autocomplete attribute entirely, and
+         *    each vendor reads only its own. They matter doubly now:
+         *    without them, "new-password" would invite a manager to
+         *    offer to generate one.
+         *  - spellCheck/autoCorrect/autoCapitalize: surnames are not
+         *    dictionary words, and a phone keyboard capitalising an
+         *    email address is a wrong search.
+         */
         <input
           type="text"
           role="combobox"
           aria-expanded={open}
           aria-controls={listId}
           aria-autocomplete="list"
-          autoComplete="off"
+          autoComplete="new-password"
+          data-1p-ignore
+          data-lpignore="true"
+          data-bwignore
+          data-form-type="other"
+          spellCheck={false}
+          autoCorrect="off"
+          autoCapitalize="off"
           value={query}
           placeholder={placeholder}
           onChange={(e) => {
