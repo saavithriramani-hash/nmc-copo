@@ -404,11 +404,64 @@ du -sh /var/lib/docker/volumes/*        # database and app storage
   docker compose exec app sh -c 'ls -lh /app/storage/bundles /app/storage/exports'
   docker compose exec app sh -c 'rm -f /app/storage/bundles/*.zip /app/storage/exports/*.zip'
   ```
+  Each bundle also leaves the **working directory** it was assembled in
+  (`/app/storage/bundles/<job id>/`, no `.zip`). That is deliberate — a
+  bundle that died half-way is resumed from it — but it roughly doubles
+  the space a bundle occupies, and it is dead weight once the `.zip`
+  exists. Once you have the zip:
+  ```
+  docker compose exec app sh -c 'du -sh /app/storage/bundles/*/'
+  docker compose exec app sh -c 'find /app/storage/bundles -mindepth 1 -maxdepth 1 -type d -mtime +30 -exec rm -rf {} +'
+  ```
+  That removes only working directories older than 30 days; the `.zip`
+  files, which are the deliverable, are untouched.
 - If **backups** are the bulk and you are within policy, either extend the
   disk or reduce retention in `.env` (`KEEP_*_DAYS`) — but keep at least a
   full accreditation cycle of monthly dumps.
 - If the **database volume** itself is large, that is expected at scale
   (millions of marks). Extend the disk; do not delete data.
+- **Container logs are capped** at 10 MB × 5 files per container by the
+  `logging:` block in `docker-compose.yml` — 150 MB across the three,
+  and it cannot grow past that. If you are on a stack deployed before
+  that cap existed, the old log files are still on disk and are safe to
+  clear by recreating the containers (`docker compose up -d --force-recreate`).
+  To check what they are using now:
+  ```
+  du -sh $(docker inspect --format='{{.LogPath}}' copo-app copo-db copo-backup)
+  ```
+
+**What actually grows, in order.** Marks dominate everything else: about
+275 bytes per mark value, so roughly 700 MB per semester at full college
+scale and 7–8 GB over a five-year accreditation cycle. Accreditation
+bundles come next and are the easiest to reclaim. The audit log is
+around 500 bytes per entry and reaches only a few hundred MB over the
+same five years — **do not prune it to save space**; it is the record of
+who changed what (NFR-9), and the saving would be negligible.
+
+### Nightly housekeeping (automatic)
+
+`ops/cleanup.sh` runs from the backup container after each night's
+backup — **after**, deliberately, so that anything it removes is already
+in a dump taken minutes earlier. A cleanup failure is logged and never
+stops the backup loop.
+
+| Removed | Default | Setting |
+|---|---|---|
+| Working directories of finished bundles (never the `.zip`) | 30 days | `KEEP_BUNDLE_WORKDIR_DAYS` |
+| Completed and failed jobs — a consolidation is simply re-run | 180 days | `KEEP_JOB_DAYS` |
+| Sessions that can no longer sign anyone in | 90 days | `KEEP_EXPIRED_SESSION_DAYS` |
+
+It will **not** touch marks, attainment snapshots, backups, bundle
+`.zip` files, or jobs still `PENDING`/`RUNNING` (one may be live, and a
+restartable job is resumed from its row). There is deliberately **no
+setting for the audit log** — it is never pruned.
+
+To see what it did, or to run it by hand:
+
+```
+docker compose logs backup | grep '\[cleanup\]'
+docker compose exec backup bash /ops/cleanup.sh
+```
 
 ### 9.5 A background job is stuck or failed
 

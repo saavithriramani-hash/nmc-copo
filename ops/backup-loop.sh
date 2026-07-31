@@ -34,6 +34,12 @@ while true; do
 
   bash /ops/backup.sh || echo "[backup-loop] backup failed; see above." >&2
 
+  # Housekeeping runs AFTER the backup, never before: if cleanup ever
+  # removed something it should not have, the dump taken minutes earlier
+  # still has it. A cleanup failure is never allowed to stop the loop —
+  # backups matter more than disk tidiness.
+  bash /ops/cleanup.sh || echo "[backup-loop] cleanup failed; disk may grow. See above." >&2
+
   # Weekly restore drill: only when the last verified restore is older
   # than VERIFY_EVERY_DAYS. verify-restore records its own success.
   STATUS="${BACKUP_DIR:-/backups}/backup-status.json"

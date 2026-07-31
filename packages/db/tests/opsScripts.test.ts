@@ -85,3 +85,79 @@ describe('deploy.sh — one command, no destructive surprises', () => {
     expect(script).toContain('BOOTSTRAP_TOKEN');
   });
 });
+
+describe('cleanup.sh — nightly housekeeping that must never eat the record', () => {
+  const script = read('cleanup.sh');
+
+  it('NEVER touches the audit log, the marks, or the snapshots', () => {
+    // The whole risk of an unattended delete script is that it one day
+    // removes the thing an accreditation auditor asks for. These three
+    // are the record; nothing here may issue a DELETE against them.
+    for (const table of ['AuditLog', 'MarkValue', 'AttainmentSnapshot']) {
+      expect(script, table).not.toMatch(new RegExp(`DELETE\s+FROM\s+"${table}"`, 'i'));
+    }
+  });
+
+  it('offers no retention setting for the audit log, so none can be set by mistake', () => {
+    expect(script).not.toMatch(/KEEP_AUDIT/i);
+    // …and says why, where the next person will look.
+    expect(script).toMatch(/AuditLog/);
+    expect(script.toLowerCase()).toMatch(/never/);
+  });
+
+  it('deletes only jobs that have actually finished', () => {
+    // A PENDING or RUNNING row may be a live job, and NFR-4 restarts a
+    // job from its row — deleting one mid-flight would strand it.
+    expect(script).toMatch(/DELETE FROM "Job"/);
+    expect(script).toMatch(/status IN \('COMPLETED', 'FAILED'\)/);
+    expect(script).toMatch(/"finishedAt" IS NOT NULL/);
+  });
+
+  it('deletes only sessions that can no longer authenticate anyone', () => {
+    expect(script).toMatch(/DELETE FROM "Session"/);
+    expect(script).toMatch(/"revokedAt" IS NOT NULL/);
+    expect(script).toMatch(/"expiresAt" </);
+  });
+
+  it('removes bundle working DIRECTORIES only, never the .zip deliverable', () => {
+    expect(script).toMatch(/-type d/);
+    expect(script).toMatch(/-mtime "\+\$\{KEEP_BUNDLE_WORKDIR_DAYS\}"/);
+    // A bare rm of the bundles folder, or of the zips, would destroy
+    // accreditation output that was never downloaded. The script may
+    // TALK about .zip files — it explains why it leaves them — but no
+    // delete may name one.
+    expect(script).not.toMatch(/rm -rf "?\$\{STORAGE_DIR\}\/bundles"?\s*$/m);
+    for (const line of script.split('\n')) {
+      if (line.trimStart().startsWith('#')) continue;
+      if (!/\.zip/.test(line)) continue;
+      expect(line, 'no delete may name a .zip').not.toMatch(/\brm\b|-delete|unlink/);
+    }
+  });
+
+  it('fails loudly rather than silently deleting against the wrong database', () => {
+    expect(script).toMatch(/PGHOST:\?/);
+    expect(script).toMatch(/PGDATABASE:\?/);
+    expect(script).toMatch(/ON_ERROR_STOP=1/);
+  });
+
+  it('every retention window is configurable and has a default', () => {
+    for (const setting of ['KEEP_BUNDLE_WORKDIR_DAYS', 'KEEP_JOB_DAYS', 'KEEP_EXPIRED_SESSION_DAYS']) {
+      expect(script, setting).toMatch(new RegExp(`${setting}:-\\d+`));
+    }
+  });
+});
+
+describe('backup-loop.sh — housekeeping is subordinate to backups', () => {
+  const script = read('backup-loop.sh');
+
+  it('runs cleanup AFTER the backup, so the dump predates any deletion', () => {
+    const backupAt = script.indexOf('/ops/backup.sh');
+    const cleanupAt = script.indexOf('/ops/cleanup.sh');
+    expect(cleanupAt).toBeGreaterThan(-1);
+    expect(cleanupAt).toBeGreaterThan(backupAt);
+  });
+
+  it('never lets a cleanup failure stop the nightly loop', () => {
+    expect(script).toMatch(/cleanup\.sh \|\| echo/);
+  });
+});
