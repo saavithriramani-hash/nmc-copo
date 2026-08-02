@@ -19,6 +19,39 @@ a:focus-visible {
   outline-offset: 0;
 }
 
+/* File inputs.
+   The browser default — a grey "Choose File" chip and the words "No file
+   chosen" — is the one control in the application that ignores the button
+   style everything else follows, and it sits directly beside a styled
+   Preview button in all three importers (roster, marks, bulk accounts).
+   Styled here rather than per component so a later importer inherits it
+   instead of being missed.
+   `font: inherit` matters: the chip otherwise renders in the browser's own
+   UI font at its own size, so it would not match the input beside it, whose
+   size differs by screen. */
+input[type='file'] {
+  @apply text-gray-600;
+}
+input[type='file']::file-selector-button {
+  @apply mr-2 rounded border border-gray-300 bg-white px-3 py-1 text-gray-700;
+  font: inherit;
+  cursor: pointer;
+}
+input[type='file']:hover::file-selector-button {
+  @apply bg-gray-100;
+}
+/* The ring belongs on the chip: it is what the keyboard actually lands on. */
+input[type='file']:focus-visible {
+  outline: none;
+}
+input[type='file']:focus-visible::file-selector-button {
+  outline: 2px solid #1d4ed8;
+  outline-offset: 0;
+}
+input[type='file']:disabled::file-selector-button {
+  @apply cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400;
+}
+
 /* A blank ("did not attempt") mark cell — visibly distinct from a real 0.
    Faint diagonal hatch so an empty cell never reads as an absent value. */
 .mark-blank {
