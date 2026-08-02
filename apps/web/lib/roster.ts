@@ -77,6 +77,11 @@ export function parseRosterRows(rows: string[][]): RosterParseResult {
     const emailRaw = emailCol >= 0 ? (cells[emailCol] ?? '').trim() : '';
 
     if (registerNumber === '' && fullName === '') continue; // stray blank line
+    // The downloadable template carries '#' guidance lines, as the account
+    // template does. Left in place they would otherwise import as students
+    // named after the instructions — a comment is not a register number.
+    if ((cells[0] ?? '').trimStart().startsWith('#')) continue;
+
     if (registerNumber === '') {
       errors.push({ row: sourceRow, message: 'Missing register number.' });
       continue;

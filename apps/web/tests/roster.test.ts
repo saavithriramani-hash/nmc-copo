@@ -51,6 +51,29 @@ describe('parseRosterRows — validation (surfaced in the preview, nothing writt
   it('reports an empty file', () => {
     expect(parseRosterRows([]).errors[0]?.message).toMatch(/no rows/);
   });
+
+  it('skips "#" comment lines rather than importing them as students', () => {
+    // The downloadable template carries its guidance this way. Left in
+    // place, a comment must be neither a student nor a parse error — the
+    // same convention the account importer follows.
+    const result = parseRosterRows([
+      ['Register No', 'Name', 'Email'],
+      ['# Delete these example rows before importing.', '', ''],
+      ['24MAT001', 'Anita', 'anita@nmc.dev'],
+      ['   # indented comments count too', '', ''],
+    ]);
+    expect(result.entries).toEqual([{ registerNumber: '24MAT001', fullName: 'Anita', email: 'anita@nmc.dev' }]);
+    expect(result.errors).toEqual([]);
+  });
+
+  it('does not mistake a register number merely containing "#" for a comment', () => {
+    // Only a LEADING hash comments a row out.
+    const result = parseRosterRows([
+      ['Register No', 'Name'],
+      ['24MAT#01', 'Anita'],
+    ]);
+    expect(result.entries).toEqual([{ registerNumber: '24MAT#01', fullName: 'Anita', email: null }]);
+  });
 });
 
 describe('planRosterImport — diff against the existing roster', () => {

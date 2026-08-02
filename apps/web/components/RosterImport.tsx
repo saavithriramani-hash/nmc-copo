@@ -39,11 +39,15 @@ export function RosterImport({ batchId }: { batchId: string }) {
         Columns: register number, name, and an optional email — with or without a header row. You will see a preview
         before anything is saved.
       </p>
-      <form action={runPreview} className="flex items-center gap-2">
+      <form action={runPreview} className="flex flex-wrap items-center gap-2">
         <input type="file" name="file" accept=".csv,.xlsx,.xlsm,text/csv" required className="text-sm" />
         <button type="submit" disabled={pending} className="border border-gray-300 rounded px-3 py-1.5 hover:bg-gray-100 disabled:opacity-50">
           {pending ? 'Reading…' : 'Preview'}
         </button>
+        {/* Same offer, in the same place, as the account importer. */}
+        <a href={`/api/batches/${batchId}/roster/template`} className="text-xs text-blue-700 hover:underline">
+          Download a blank template
+        </a>
       </form>
 
       {done ? <p className="text-green-800 bg-green-50 border border-green-200 rounded px-3 py-2">{done}</p> : null}
