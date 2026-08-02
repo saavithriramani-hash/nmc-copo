@@ -30,14 +30,15 @@ export type DepartmentActionType =
   | 'department.read' // department consolidation
   | 'course.create' // create a course in a batch of this department (FR-4)
   | 'templates.manage' // department assessment templates (FR-8)
-  | 'roster.manage'; // import/edit batch rosters of this department (FR-10)
+  | 'roster.manage' // import/edit batch rosters of this department (FR-10)
+  | 'batches.manage'; // create batches in this department's programmes (CR-2) — shared with the administrator
 
 /** Institution-wide actions (no resource id). */
 export type InstitutionActionType =
   | 'institution.read' // consolidations, dashboards, accreditation bundles
   | 'settings.institution.write' // global attainment defaults (IQAC)
   | 'users.manage' // accounts + role assignments (admin)
-  | 'departments.manage' // departments, programmes, batches, rollover structures
+  | 'departments.manage' // institution, departments, programmes, rollover structures (batches are `batches.manage`)
   | 'rollover.execute' // academic-year rollover
   | 'backups.manage' // backup/restore operations
   | 'audit.read'; // the audit log itself

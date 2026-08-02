@@ -76,7 +76,13 @@ changing any of them is now a change request against this baseline.
 2. **Principal** gets consolidation reads only ("read-only dashboards"),
    not per-course drill-down.
 3. **Admin holds no academic data access** (separation of duties; §2
-   lists only accounts/departments/rollover/backups).
+   lists only accounts/departments/rollover/backups). `batches.manage`
+   (CR-2) is the one action the admin **shares** with a scoped role: a
+   batch is an empty container, not academic data, and both the HoD who
+   fills it and the rollover the admin runs need to make one. It covers
+   renaming and deleting a batch as well as creating it — and deletion is
+   still refused outright while any course or roster references it, so
+   sharing the action shares no power over student data.
 4. **Submitted courses freeze faculty edits** while the HoD reviews;
    LOCKED freezes everyone (unlock creates a new version).
 5. **Parameter overrides**: institution → the Dean; programme *and*
@@ -90,7 +96,7 @@ changing any of them is now a change request against this baseline.
    (defeating NFR-10), remove a colleague the HoD had posted, or strand
    the course by removing themselves.
 
-## Tests (61, no database needed)
+## Tests (88, no database needed)
 
 `npm test` — the policy matrix role-by-role; guard proofs that a faculty
 account cannot reach another department's marks by **any** catalogued

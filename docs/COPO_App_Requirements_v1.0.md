@@ -35,10 +35,12 @@ A single institutional system that captures question-wise marks once for every c
 
 > **CR-1 (30 July 2026) — change request against the confirmed baseline.** The role table below supersedes the one issued with v1.0. Three changes, at the college's instruction: the *programme coordinator* is removed and its capabilities pass to the HoD, who is responsible for every programme of their department; *IQAC* becomes read-only; and *Dean* separates from *Principal* as its own role, taking the institution-parameter authority IQAC formerly held. Implemented by migration `20260730000000_roles_dean_and_no_coordinator`, which **deletes** existing coordinator assignments — that role history does not survive the change.
 
+> **CR-2 (31 July 2026) — change request against the confirmed baseline.** The HoD may **create, rename and delete batches** in the programmes of their own department; previously only the system administrator could, so a HoD had to request the container before importing the cohort's roster (FR-10) into it — and again to correct a mistyped year. The capability is **added, not moved**: the administrator keeps it, because academic-year rollover creates batches and a department between HoDs must not be stranded. Implemented as a new department-scoped action `batches.manage` rather than by widening `departments.manage` — managing a batch must not carry the power to create or destroy departments and programmes, which remain administrative. Deletion is unchanged in substance: it still refuses while any course or roster entry references the batch, naming them, and is never a cascade. No migration: this is a policy change only, and no role assignment or stored row changes.
+
 | Role | Scope | Capability |
 |---|---|---|
 | **Faculty** | Own courses | Course setup, mark entry, compute, export, submit for approval |
-| **HoD** | Own department, all its programmes | All faculty capability department-wide; POs/PSOs and articulation matrices; programme- and course-level parameter overrides; approve and lock courses; department consolidation |
+| **HoD** | Own department, all its programmes | All faculty capability department-wide; POs/PSOs and articulation matrices; programme- and course-level parameter overrides; approve and lock courses; department consolidation; **batches of its programmes — create, rename, delete (CR-2)** |
 | **Dean** | Institution | Read-all; institution consolidation; accreditation bundles; **sets the institution attainment parameters (§4.2–§4.4)**; audit log |
 | **IQAC / Accreditation cell** | Institution | **Read-only.** Read-all; institution consolidation; accreditation bundles; audit log. Sets nothing |
 | **Principal** | Institution | Read-only dashboards |

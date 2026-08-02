@@ -106,6 +106,20 @@ export function decide(actor: ActorContext, action: Action, resource: ResourceCo
       if (isHodOf(actor, resource.departmentId)) return allow('HOD');
       return deny('OUT_OF_SCOPE');
     }
+    case 'batches.manage': {
+      // CR-2: a batch is an incoming cohort of one programme, so it is
+      // department-scoped even though it is structure. The HoD knows when
+      // a cohort arrives and already owns its roster (FR-10), and had to
+      // ask the administrator for the container first.
+      //
+      // Unlike the three actions above, the administrator KEEPS this:
+      // batches were theirs alone before CR-2, they create them during
+      // rollover, and a department between HoDs must not be stranded.
+      if (resource?.kind !== 'department') return deny('RESOURCE_NOT_FOUND');
+      if (isHodOf(actor, resource.departmentId)) return allow('HOD');
+      if (has(actor, 'ADMIN')) return allow('ADMIN');
+      return deny('OUT_OF_SCOPE');
+    }
 
     // ── institution-wide ─────────────────────────────────────────────
     case 'institution.read': {

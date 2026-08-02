@@ -29,6 +29,13 @@ export default async function ProgrammePage({
   if (!programme) notFound();
 
   const canManageOutcomes = (await guard.check(user.userId, { type: 'programme.manage', programmeId })).allow;
+  // CR-2: batches — create, rename and delete — belong to the HoD of the
+  // owning department as well as to the administrator. The programme and
+  // department rows above stay administrative.
+  const canManageBatches = (await guard.check(user.userId, {
+    type: 'batches.manage',
+    departmentId: programme.departmentId,
+  })).allow;
 
   return (
     <div className="space-y-6">
@@ -88,7 +95,7 @@ export default async function ProgrammePage({
               <th className="border border-gray-300 px-2 py-1">Batch</th>
               <th className="border border-gray-300 px-2 py-1">Courses</th>
               <th className="border border-gray-300 px-2 py-1">Roster</th>
-              {user.isAdmin ? <th className="border border-gray-300 px-2 py-1 w-56">Manage</th> : null}
+              {canManageBatches ? <th className="border border-gray-300 px-2 py-1 w-56">Manage</th> : null}
             </tr>
           </thead>
           <tbody>
@@ -101,7 +108,7 @@ export default async function ProgrammePage({
                     {batch._count.roster} students
                   </Link>
                 </td>
-                {user.isAdmin ? (
+                {canManageBatches ? (
                   <td className="border border-gray-300 px-2 py-1 align-top">
                     <StructureControls kind="batch" id={batch.id} name={batch.name} />
                   </td>
@@ -110,12 +117,12 @@ export default async function ProgrammePage({
             ))}
             {programme.batches.length === 0 ? (
               <tr>
-                <td colSpan={user.isAdmin ? 4 : 3} className="border border-gray-300 px-2 py-2 text-gray-600">No batches yet.</td>
+                <td colSpan={canManageBatches ? 4 : 3} className="border border-gray-300 px-2 py-2 text-gray-600">No batches yet.</td>
               </tr>
             ) : null}
           </tbody>
         </table>
-        {user.isAdmin ? (
+        {canManageBatches ? (
           <form action={createBatchAction} className="flex items-center gap-2">
             <input type="hidden" name="programmeId" value={programme.id} />
             <input name="startYear" type="number" required placeholder="Start year" className="w-28 border border-gray-300 rounded px-2 py-1" />

@@ -298,6 +298,74 @@ describe('policy — course creation and assessment templates (department chain)
   });
 });
 
+// One action covers create, rename and delete: the screens differ, the
+// authority does not. Anything that may add a cohort may correct the year
+// it typed into it.
+describe('policy — batches: the HoD and the administrator, together (CR-2)', () => {
+  it('the HoD creates batches in their own department', () => {
+    expect(decide(hodMath, { type: 'batches.manage', departmentId: 'dept-math' }, DEPT_MATH)).toEqual({
+      allow: true,
+      via: 'HOD',
+    });
+  });
+
+  it('…and in no other department, headship being the only scoped role', () => {
+    expect(decide(hodMath, { type: 'batches.manage', departmentId: 'dept-physics' }, DEPT_PHYS)).toEqual({
+      allow: false,
+      reason: 'OUT_OF_SCOPE',
+    });
+  });
+
+  it('the administrator keeps it, in every department', () => {
+    // CR-2 ADDS a holder; it does not move the capability. Rollover
+    // creates batches, and a department between HoDs must not be stranded.
+    for (const dept of [DEPT_MATH, DEPT_PHYS]) {
+      expect(decide(admin, { type: 'batches.manage', departmentId: dept.departmentId }, dept)).toEqual({
+        allow: true,
+        via: 'ADMIN',
+      });
+    }
+  });
+
+  it('nobody else creates a batch — not the Dean, the IQAC, the Principal or faculty', () => {
+    for (const who of [facultyMath1, dean, iqac, principal]) {
+      expect(decide(who, { type: 'batches.manage', departmentId: 'dept-math' }, DEPT_MATH).allow, who.userId).toBe(
+        false,
+      );
+    }
+  });
+
+  it('creating a batch is not creating a department: the HoD gains nothing institution-wide', () => {
+    // The whole point of the separate action. Had CR-2 been implemented by
+    // handing the HoD `departments.manage`, this would pass silently and
+    // they could create departments and programmes across the college.
+    for (const type of ['departments.manage', 'users.manage', 'rollover.execute', 'backups.manage'] as const) {
+      expect(decide(hodMath, { type }, null).allow, type).toBe(false);
+    }
+  });
+
+  it('an unknown department denies before any role is consulted', () => {
+    // The action carries an id the caller supplies. A programme that does
+    // not exist must look exactly like one that is out of reach.
+    expect(decide(admin, { type: 'batches.manage', departmentId: 'dept-nope' }, null)).toEqual({
+      allow: false,
+      reason: 'RESOURCE_NOT_FOUND',
+    });
+    expect(decide(hodMath, { type: 'batches.manage', departmentId: '' }, null)).toEqual({
+      allow: false,
+      reason: 'RESOURCE_NOT_FOUND',
+    });
+  });
+
+  it('an inactive HoD creates nothing, CR-2 notwithstanding', () => {
+    const inactive = actor('hod-math', hodMath.roles, false);
+    expect(decide(inactive, { type: 'batches.manage', departmentId: 'dept-math' }, DEPT_MATH)).toEqual({
+      allow: false,
+      reason: 'ACCOUNT_INACTIVE',
+    });
+  });
+});
+
 describe('policy — cross-cutting', () => {
   it('an inactive account is denied everything, whatever its roles', () => {
     const inactiveHod = actor('hod-math', hodMath.roles, false);

@@ -73,14 +73,28 @@ export async function createProgrammeAction(formData: FormData): Promise<void> {
   revalidatePath('/admin/departments');
 }
 
+/**
+ * CR-2: batches are created by the administrator OR by the HoD of the
+ * owning department, so this one is department-scoped where the rest of
+ * this file is institution-scoped. The department is derived from the
+ * programme on the server — never taken from the form, which the caller
+ * controls.
+ */
 export async function createBatchAction(formData: FormData): Promise<void> {
   const user = await requireSession();
-  await guard.require(user.userId, { type: 'departments.manage' });
 
   const programmeId = String(formData.get('programmeId') ?? '');
+  const programme = programmeId
+    ? await prisma.programme.findUnique({ where: { id: programmeId }, select: { departmentId: true } })
+    : null;
+  // No programme means nothing to authorise against. Denying by way of a
+  // department that cannot match keeps a guessed id and a forbidden one
+  // indistinguishable, as everywhere else.
+  await guard.require(user.userId, { type: 'batches.manage', departmentId: programme?.departmentId ?? '' });
+
   const startYear = Number(formData.get('startYear'));
   const endYear = Number(formData.get('endYear'));
-  if (!programmeId || !Number.isInteger(startYear) || !Number.isInteger(endYear) || endYear <= startYear) {
+  if (!Number.isInteger(startYear) || !Number.isInteger(endYear) || endYear <= startYear) {
     redirect(`/programmes/${programmeId}?error=Valid+start+and+end+years+are+required`);
   }
 
@@ -162,14 +176,34 @@ export async function saveOutcomesAction(
 
 /* ── rename and delete (FR-1) ────────────────────────────────────────────
  *
- * ADMIN only, like creation. Deletion refuses while anything references
- * the row and says what; it is never a cascade, so no course, mark,
- * roster entry, role or locked snapshot is ever removed as a side effect.
- * `onDelete: Restrict` in the schema enforces the same rule at the
- * database, which is what makes the check-then-delete race fail safe.
+ * ADMIN only for departments and programmes. **Batches follow CR-2**: the
+ * HoD of the owning department renames and deletes them too, on the same
+ * `batches.manage` that lets them create one — a HoD who could add a
+ * batch but not correct its years would still be waiting on the
+ * administrator for the mistake they had just been trusted to make.
+ *
+ * Deletion refuses while anything references the row and says what; it is
+ * never a cascade, so no course, mark, roster entry, role or locked
+ * snapshot is ever removed as a side effect. `onDelete: Restrict` in the
+ * schema enforces the same rule at the database, which is what makes the
+ * check-then-delete race fail safe.
  */
 
 export type StructureResult = { error?: string; ok?: boolean };
+
+/**
+ * The department a batch belongs to, for the CR-2 guard. Returns `''`
+ * when the batch is gone, which no department can match — so a batch that
+ * never existed and one the caller may not touch are both denied
+ * identically, as everywhere else in this application.
+ */
+async function departmentOfBatch(batchId: string): Promise<string> {
+  const batch = await prisma.batch.findUnique({
+    where: { id: batchId },
+    select: { programme: { select: { departmentId: true } } },
+  });
+  return batch?.programme.departmentId ?? '';
+}
 
 /** A concurrent write slipped a dependant in between the check and the delete. */
 function raceGuard(err: unknown, name: string): StructureResult {
@@ -249,13 +283,15 @@ export async function renameProgrammeAction(programmeId: string, rawName: string
 
 export async function renameBatchAction(batchId: string, rawName: string): Promise<StructureResult> {
   const user = await requireSession();
-  await guard.require(user.userId, { type: 'departments.manage' });
+  await guard.require(user.userId, { type: 'batches.manage', departmentId: await departmentOfBatch(batchId) });
 
   const problem = validateStructureName(rawName);
   if (problem) return { error: problem };
   const name = rawName.trim();
 
   const before = await prisma.batch.findUnique({ where: { id: batchId }, select: { name: true, programmeId: true } });
+  // Reachable only if the batch went between the guard's lookup and this
+  // one — a second admin deleting it mid-edit. Kept, and kept graceful.
   if (!before) return { error: 'That batch no longer exists.' };
   if (before.name === name) return { ok: true };
 
@@ -353,7 +389,7 @@ export async function deleteProgrammeAction(programmeId: string): Promise<Struct
 
 export async function deleteBatchAction(batchId: string): Promise<StructureResult> {
   const user = await requireSession();
-  await guard.require(user.userId, { type: 'departments.manage' });
+  await guard.require(user.userId, { type: 'batches.manage', departmentId: await departmentOfBatch(batchId) });
 
   const batch = await prisma.batch.findUnique({
     where: { id: batchId },
