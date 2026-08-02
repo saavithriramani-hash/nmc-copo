@@ -32,6 +32,64 @@ export const ROLE_CAPABILITIES: Record<RoleKindValue, string> = {
   ADMIN: 'Accounts, departments, rollover, backups. No access to academic data.',
 };
 
+/**
+ * Compact forms, for the header badge only.
+ *
+ * The §2 labels above are the college's own words and belong on the
+ * accounts screen, where there is room for them. In the header they do
+ * not fit: one person may hold four roles at once — "System
+ * administrator, Dean, Head of Department — Mathematics, Faculty" is a
+ * line of prose sitting beside eight navigation links.
+ */
+export const ROLE_SHORT_LABELS: Record<RoleKindValue, string> = {
+  FACULTY: 'Faculty',
+  HOD: 'HoD',
+  DEAN: 'Dean',
+  IQAC: 'IQAC',
+  PRINCIPAL: 'Principal',
+  ADMIN: 'Admin',
+};
+
+export interface DisplayRole {
+  kind: RoleKindValue;
+  /** HOD only. Every other role is institution-wide (§2). */
+  departmentName?: string | null;
+}
+
+/**
+ * The signed-in user's roles, as short badges — "HoD Mathematics",
+ * "Dean", "Admin".
+ *
+ * The HoD is the only scoped role, so it is the only one that can carry
+ * a department, and it leads: it is the one badge that says *where* the
+ * holder's authority applies, and a reader who holds several roles is
+ * asking exactly that. The rest follow in the §2 table order so the list
+ * is stable between renders rather than in whatever order the roles came
+ * back from the database.
+ *
+ * Returns an empty array for an account with no role in force — real,
+ * and not an error: CR-1 left the former programme coordinators in
+ * exactly that state.
+ */
+export function describeRoles(roles: readonly DisplayRole[]): string[] {
+  const rank = (role: DisplayRole) => (role.kind === 'HOD' ? -1 : ROLE_KINDS.indexOf(role.kind));
+
+  return [...roles]
+    .sort((a, b) => {
+      const byKind = rank(a) - rank(b);
+      if (byKind !== 0) return byKind;
+      // Two headships: order by department so the badge never reshuffles.
+      return (a.departmentName ?? '').localeCompare(b.departmentName ?? '');
+    })
+    .map((role) => {
+      const label = ROLE_SHORT_LABELS[role.kind];
+      // A HOD row always has a department — the schema's CHECK constraint
+      // sees to that. If one ever arrives without a name, the bare label
+      // is still true, which is better than rendering "HoD null".
+      return role.kind === 'HOD' && role.departmentName ? `${label} ${role.departmentName}` : label;
+    });
+}
+
 export type ScopeKind = 'department' | 'none';
 
 /**

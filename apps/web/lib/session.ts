@@ -9,13 +9,28 @@ export const SESSION_COOKIE = 'copo_session';
 
 export const sessions = new SessionService(prisma);
 
+/**
+ * An effective role plus the one thing the Guard has no use for: the
+ * name of the department it is scoped to, for display.
+ *
+ * Structurally still an `EffectiveRole`, so everything that reads
+ * `user.roles` to decide what to show keeps working. The name is
+ * deliberately NOT added to `EffectiveRole` itself — that type is the
+ * Guard's input, and presentation has no business in the authorisation
+ * package.
+ */
+export interface SessionRole extends EffectiveRole {
+  /** HOD only; null for the institution-wide roles. */
+  departmentName: string | null;
+}
+
 export interface SessionUser {
   userId: string;
   sessionId: string;
   email: string;
   fullName: string;
   mustChangePassword: boolean;
-  roles: EffectiveRole[];
+  roles: SessionRole[];
   isAdmin: boolean;
   hodDepartmentIds: string[];
   isFaculty: boolean;
@@ -33,14 +48,28 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
     const live = await sessions.validate(token);
     const user = await prisma.user.findUnique({
       where: { id: live.userId },
-      select: { id: true, email: true, fullName: true, mustChangePassword: true, isActive: true, roles: true },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        mustChangePassword: true,
+        isActive: true,
+        // The department name rides along on a query that already runs,
+        // and this whole function is cache()d per request — so naming the
+        // department in the header costs no extra round trip per page.
+        roles: { include: { department: { select: { name: true } } } },
+      },
     });
     if (!user || !user.isActive) return null;
 
     const now = new Date();
-    const roles: EffectiveRole[] = user.roles
+    const roles: SessionRole[] = user.roles
       .filter((role) => roleEffectiveAt(role, now))
-      .map(({ kind, departmentId }) => ({ kind, departmentId }));
+      .map(({ kind, departmentId, department }) => ({
+        kind,
+        departmentId,
+        departmentName: department?.name ?? null,
+      }));
 
     return {
       userId: user.id,

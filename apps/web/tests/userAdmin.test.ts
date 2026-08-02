@@ -3,7 +3,9 @@ import {
   ROLE_CAPABILITIES,
   ROLE_KINDS,
   ROLE_LABELS,
+  ROLE_SHORT_LABELS,
   deactivationWouldOrphanAdmin,
+  describeRoles,
   describeWindow,
   findDuplicateRole,
   isInForce,
@@ -22,6 +24,78 @@ import {
  * the college out of its own accreditation records.
  */
 
+describe('describeRoles — the header badge', () => {
+  it('names the department on the one role that has one', () => {
+    // The whole point: "HOD" alone never said which department, and the
+    // HoD is the only role whose authority stops at a boundary.
+    expect(describeRoles([{ kind: 'HOD', departmentName: 'Mathematics' }])).toEqual(['HoD Mathematics']);
+  });
+
+  it('leaves the institution-wide roles unqualified', () => {
+    expect(describeRoles([{ kind: 'DEAN' }, { kind: 'IQAC' }, { kind: 'PRINCIPAL' }, { kind: 'ADMIN' }])).toEqual([
+      'Dean',
+      'IQAC',
+      'Principal',
+      'Admin',
+    ]);
+  });
+
+  it('puts the scoped role first, whatever order the roles arrive in', () => {
+    // The real four-role account, as the database returns it.
+    expect(
+      describeRoles([
+        { kind: 'ADMIN' },
+        { kind: 'DEAN' },
+        { kind: 'HOD', departmentName: 'Mathematics' },
+        { kind: 'FACULTY' },
+      ]),
+    ).toEqual(['HoD Mathematics', 'Faculty', 'Dean', 'Admin']);
+  });
+
+  it('is stable: the same roles in a different order render identically', () => {
+    // Roles come back in no guaranteed order, and a badge that reshuffles
+    // between page loads reads as a permission change.
+    const a = describeRoles([{ kind: 'FACULTY' }, { kind: 'DEAN' }, { kind: 'HOD', departmentName: 'Physics' }]);
+    const b = describeRoles([{ kind: 'DEAN' }, { kind: 'HOD', departmentName: 'Physics' }, { kind: 'FACULTY' }]);
+    expect(a).toEqual(b);
+  });
+
+  it('handles a head of two departments, ordered by name', () => {
+    expect(
+      describeRoles([
+        { kind: 'HOD', departmentName: 'Physics' },
+        { kind: 'HOD', departmentName: 'Mathematics' },
+      ]),
+    ).toEqual(['HoD Mathematics', 'HoD Physics']);
+  });
+
+  it('returns nothing for an account with no role in force', () => {
+    // CR-1 left the former programme coordinators exactly here: able to
+    // sign in, holding nothing. The header says so rather than showing a
+    // blank where a role should be.
+    expect(describeRoles([])).toEqual([]);
+  });
+
+  it('falls back to the bare label if a headship arrives without its department', () => {
+    // The schema's CHECK makes this unreachable; "HoD undefined" in the
+    // header would be worse than a true, less specific badge.
+    expect(describeRoles([{ kind: 'HOD' }])).toEqual(['HoD']);
+    expect(describeRoles([{ kind: 'HOD', departmentName: null }])).toEqual(['HoD']);
+  });
+
+  it('never renders a raw enum name, which is what the header used to show', () => {
+    const rendered = describeRoles(ROLE_KINDS.map((kind) => ({ kind, departmentName: 'Mathematics' })));
+    // Every kind whose enum differs from how a person would write it.
+    // "IQAC" is excluded on purpose: the acronym IS the display form, so
+    // an all-caps test would call the correct answer a failure.
+    for (const raw of ['HOD', 'ADMIN', 'PRINCIPAL', 'FACULTY', 'DEAN'] as const) {
+      expect(rendered, raw).not.toContain(raw);
+    }
+    expect(rendered).toContain('IQAC');
+    expect(rendered).toContain('HoD Mathematics');
+  });
+});
+
 describe('role scope (§2 role table, mirrored by the database CHECK)', () => {
   it('requires a department for the HoD, and no scope at all for the rest', () => {
     expect(scopeFor('HOD')).toBe('department');
@@ -34,6 +108,13 @@ describe('role scope (§2 role table, mirrored by the database CHECK)', () => {
     for (const kind of ROLE_KINDS) {
       expect(ROLE_LABELS[kind], kind).toBeTruthy();
       expect(ROLE_CAPABILITIES[kind], kind).toBeTruthy();
+    }
+  });
+
+  it('has a short badge form for every role, not only the long §2 label', () => {
+    for (const kind of ROLE_KINDS) {
+      expect(ROLE_SHORT_LABELS[kind], kind).toBeTruthy();
+      expect(ROLE_SHORT_LABELS[kind].length, kind).toBeLessThanOrEqual(ROLE_LABELS[kind].length);
     }
   });
 
