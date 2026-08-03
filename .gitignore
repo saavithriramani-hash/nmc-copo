@@ -3,3 +3,12 @@ coverage/
 .env
 *.tsbuildinfo
 .claude/settings.local.json
+
+# Database dumps. These hold every student's marks, so they must never
+# reach a repository — the deployment writes them here by default
+# (BACKUP_DIR / BACKUP_SECONDARY_MOUNT in .env).
+backups/
+backups-secondary/
+
+# Local run logs.
+*.log

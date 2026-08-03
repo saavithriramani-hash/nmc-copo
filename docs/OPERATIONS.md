@@ -53,6 +53,12 @@ one from the template, and stop. Open it and set a database password:
 nano .env
 #   change POSTGRES_PASSWORD to a long random value — nobody has to type
 #   it, so make it long. Save with Ctrl-O, exit with Ctrl-X.
+#
+#   check TZ as well. It decides what time BACKUP_AT means. Left at UTC,
+#   the "2am" backup runs at half past seven in the morning here.
+#
+#   leave COPO_COOKIE_SECURE=false while the system is served over plain
+#   http:// — see "Signing in fails from other machines" below.
 ```
 
 Then run `ops/deploy.sh` again. It will:
@@ -71,6 +77,12 @@ Then open **System health** (top menu) and confirm everything is green.
 
 > **Configure the second backup location now** (section 4). A backup on
 > the same machine does not survive that machine dying.
+
+> **Do the first sign-in promptly.** Until an administrator exists, the
+> account-creation route is open to anyone holding the one-time
+> `BOOTSTRAP_TOKEN` that `deploy.sh` wrote into `.env`. It refuses every
+> call the moment the first administrator is created, so the window
+> closes by itself — but it stays open while nobody has signed in.
 
 ---
 
@@ -326,9 +338,36 @@ item that is not green tells you exactly what to do.
 
 ---
 
-## 9. Diagnosing the five most likely failures
+## 9. Diagnosing the most likely failures
 
 For each: what you would see, and exactly what to do.
+
+### 9.0 Signing in fails from every machine except the server
+
+**Symptom.** You type the right email and password, the page seems to
+accept them, and you land back on the login screen. It happens on every
+staff machine. On the server's own console, in a browser opened there, it
+works perfectly.
+
+**Cause.** The sign-in cookie is marked "Secure", which browsers only
+accept over `https://`. Browsers make one exception — `localhost` — which
+is why it works on the server itself and nowhere else.
+
+**Fix.** In `.env`:
+
+```
+COPO_COOKIE_SECURE=false
+```
+
+then `docker compose up -d app`. Do this only while the system is served
+over plain `http://`.
+
+> **This is a stopgap.** With it set to false, the sign-in cookie and
+> every password typed into the login page cross the campus network in
+> clear. Anyone able to watch that network can read them. Putting a
+> reverse proxy with a TLS certificate in front and setting this back to
+> `true` is the proper answer, and should happen before the whole college
+> depends on the system.
 
 ### 9.1 The application will not load in the browser
 

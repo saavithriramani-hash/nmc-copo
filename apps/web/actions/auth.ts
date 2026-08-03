@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { AccountService, AuthError, AuthService, LocalAuthProvider } from '@copo/auth';
 import { prisma } from '@/lib/db';
 import { auditSink, guard } from '@/lib/authz';
+import { sessionCookieSecure } from '@/lib/cookies';
 import { SESSION_COOKIE, getSessionUser, requireSession, sessions } from '@/lib/session';
 
 const authService = new AuthService(new LocalAuthProvider(prisma), sessions, auditSink);
@@ -14,7 +15,10 @@ async function setSessionCookie(token: string, expiresAt: Date): Promise<void> {
   (await cookies()).set(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    // Not simply NODE_ENV: a production build served over plain HTTP on
+    // the campus LAN issues a cookie the browser then discards, and the
+    // user is bounced back to the login screen. See lib/cookies.ts.
+    secure: sessionCookieSecure(),
     path: '/',
     expires: expiresAt,
   });

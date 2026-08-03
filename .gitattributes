@@ -1,0 +1,14 @@
+# Shell scripts must keep LF endings, whatever the checkout platform.
+#
+# ops/entrypoint-app.sh is COPIED INTO the application image and
+# ops/backup-loop.sh is bind-mounted and run by the backup container. A
+# CRLF checkout gives them a "#!/bin/sh\r" shebang, so the kernel looks
+# for an interpreter literally named "/bin/sh\r" and the container dies
+# with "no such file or directory" — a failure that says nothing about
+# its cause. Windows checkouts with core.autocrlf=true do exactly this.
+*.sh text eol=lf
+
+# Same reasoning for anything else read by a Linux tool as text.
+Dockerfile text eol=lf
+*.yml text eol=lf
+*.sql text eol=lf

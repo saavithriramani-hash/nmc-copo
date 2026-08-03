@@ -63,6 +63,23 @@ services:
       NODE_ENV: production
       COPO_STORAGE_DIR: /app/storage
       BACKUP_DIR: /backups
+      # The one-time token that authorises creating the FIRST
+      # administrator. ops/deploy.sh generates it and sends it as a
+      # header; without it here the application had nothing to compare
+      # against, so the check silently passed and anyone who could reach
+      # the port during the first few minutes could claim the account.
+      # The route locks itself permanently once an administrator exists.
+      BOOTSTRAP_TOKEN: ${BOOTSTRAP_TOKEN:-}
+      # Whether the session cookie is marked Secure. A production build
+      # defaults to yes — correct behind TLS, and fatal without it: the
+      # browser silently discards the cookie and every user outside the
+      # server itself is returned to the login screen. Set to false in
+      # .env while the system is served over plain HTTP.
+      COPO_COOKIE_SECURE: ${COPO_COOKIE_SECURE:-}
+      # Local time for the container. Timestamps in the log and the
+      # health page otherwise read UTC, which is 5½ hours behind the
+      # people reading them.
+      TZ: ${TZ:-Asia/Kolkata}
     volumes:
       # Accreditation bundles and data exports.
       - app_storage:/app/storage
@@ -85,6 +102,11 @@ services:
       PGUSER: ${POSTGRES_USER:-copo}
       PGPASSWORD: ${POSTGRES_PASSWORD}
       PGDATABASE: ${POSTGRES_DB:-copo}
+      # BACKUP_AT is read as the CONTAINER's local time. Without this the
+      # container is UTC, so the default 02:00 fires at 07:30 in Tamil
+      # Nadu — the middle of the working day, which is the one time the
+      # nightly dump was meant to avoid.
+      TZ: ${TZ:-Asia/Kolkata}
       BACKUP_DIR: /backups
       BACKUP_SECONDARY_DIR: ${BACKUP_SECONDARY_DIR:-}
       BACKUP_AT: ${BACKUP_AT:-02:00}

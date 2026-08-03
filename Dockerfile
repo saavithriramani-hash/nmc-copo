@@ -30,6 +30,25 @@ COPY . .
 RUN npx prisma generate --schema packages/db/prisma/schema.prisma
 RUN npm run build -w @copo/web
 
+# ─────────────────────── prisma CLI stage ──────────────────────────
+# The migration CLI, with its dependency tree resolved BY NPM rather than
+# listed by hand.
+#
+# The runtime image previously copied node_modules/prisma and
+# node_modules/@prisma and hoped that was enough. It was not: the CLI also
+# needs effect, empathic, fast-check and whatever those pull in, and each
+# omission surfaced only as a crash-looping container at start-up. The
+# version is read from the repository's own lockfile, so this can never
+# drift from the Prisma the application was built against.
+FROM node:22-bookworm-slim AS prismacli
+WORKDIR /cli
+COPY package-lock.json ./
+RUN PRISMA_VERSION="$(node -p "require('./package-lock.json').packages['node_modules/prisma'].version")" \
+    && echo "installing prisma@${PRISMA_VERSION} (from the lockfile)" \
+    && npm init -y > /dev/null \
+    && npm install --omit=optional --no-audit --no-fund "prisma@${PRISMA_VERSION}" \
+    && node node_modules/prisma/build/index.js --version
+
 # ────────────────────────── runtime stage ──────────────────────────
 FROM node:22-bookworm-slim AS runner
 WORKDIR /app
@@ -46,14 +65,35 @@ ENV NODE_ENV=production \
 # Next's standalone output: the server plus exactly the modules it traced.
 COPY --from=builder /app/apps/web/.next/standalone ./
 COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
+# `apps/web/public` must exist in the repository even while it is empty —
+# it is kept by a .gitkeep. Docker's COPY fails the whole build when its
+# source is missing, so an absent directory here stopped the image being
+# built at all, on any machine.
 COPY --from=builder /app/apps/web/public ./apps/web/public
 
 # Migrations are applied at start-up, so the schema always matches the
 # code that is about to run. The CLI and schema are needed for that.
+#
+# The `node_modules/prisma` package carries the CLI at build/index.js
+# together with the .wasm files it loads from its OWN directory. There is
+# deliberately no copy of `node_modules/.bin/prisma` here: that is a
+# symlink to build/index.js, and COPY dereferences symlinks — so copying
+# it wrote the CLI's bytes into .bin/ where its .wasm siblings do not
+# exist, and every start-up died on a missing prisma_schema_build_bg.wasm.
+# The entrypoint calls build/index.js directly instead.
 COPY --from=builder /app/packages/db/prisma ./prisma
-COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
+# The query engine the APPLICATION uses at run time (@prisma/client).
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder /app/node_modules/.bin/prisma ./node_modules/.bin/prisma
+# The CLI, complete, in its own tree. Kept out of ./node_modules so it can
+# never overwrite a package the traced application build depends on.
+COPY --from=prismacli /cli/node_modules ./prisma-cli/node_modules
+
+# Prove the CLI can actually start, here, while building.
+#
+# Without this, a Prisma upgrade that changed the dependency tree would
+# surface as a crash-looping container on the college server. With it, the
+# image simply refuses to build on the machine of whoever made the change.
+RUN node ./prisma-cli/node_modules/prisma/build/index.js --version
 
 COPY ops/entrypoint-app.sh /usr/local/bin/entrypoint-app.sh
 RUN chmod +x /usr/local/bin/entrypoint-app.sh \
