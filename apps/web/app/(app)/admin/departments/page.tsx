@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createDepartmentAction, createInstitutionAction, createProgrammeAction } from '@/actions/structure';
+import { CreateForm } from '@/components/CreateForm';
 import { StructureControls } from '@/components/StructureControls';
 import { prisma } from '@/lib/db';
 import { requireSession } from '@/lib/session';
@@ -29,23 +30,32 @@ export default async function DepartmentsPage({ searchParams }: { searchParams: 
       {error ? <p className="text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">{error}</p> : null}
 
       {!institution ? (
-        <form action={createInstitutionAction} className="bg-white border border-gray-300 rounded p-4 space-y-2 max-w-lg">
+        <div className="bg-white border border-gray-300 rounded p-4 space-y-2 max-w-lg">
           <p className="font-medium">Create the institution</p>
           <p className="text-xs text-gray-600">
             One institution record holds the default attainment parameters (§4). Defaults are the confirmed values;
             the Dean can adjust them later.
           </p>
-          <div className="flex gap-2">
+          <CreateForm
+            action={createInstitutionAction}
+            submitLabel="Create"
+            pendingLabel="Creating…"
+            buttonClassName="bg-blue-700 text-white rounded px-3 py-1.5 hover:bg-blue-800"
+          >
             <input name="name" required placeholder="Institution name" className="flex-1 border border-gray-300 rounded px-2 py-1.5" />
-            <button type="submit" className="bg-blue-700 text-white rounded px-3 py-1.5 hover:bg-blue-800">Create</button>
-          </div>
-        </form>
+          </CreateForm>
+        </div>
       ) : (
         <>
-          <form action={createDepartmentAction} className="flex gap-2 max-w-lg">
-            <input name="name" required placeholder="New department name (e.g. Mathematics)" className="flex-1 border border-gray-300 rounded px-2 py-1.5" />
-            <button type="submit" className="bg-blue-700 text-white rounded px-3 py-1.5 hover:bg-blue-800">Add department</button>
-          </form>
+          <div className="max-w-lg">
+            <CreateForm
+              action={createDepartmentAction}
+              submitLabel="Add department"
+              buttonClassName="bg-blue-700 text-white rounded px-3 py-1.5 hover:bg-blue-800"
+            >
+              <input name="name" required placeholder="New department name (e.g. Mathematics)" className="flex-1 border border-gray-300 rounded px-2 py-1.5" />
+            </CreateForm>
+          </div>
 
           <table className="w-full bg-white border-collapse">
             <thead>
@@ -90,11 +100,10 @@ export default async function DepartmentsPage({ searchParams }: { searchParams: 
                     )}
                   </td>
                   <td className="border border-gray-300 px-2 py-1 align-top">
-                    <form action={createProgrammeAction} className="flex gap-2">
+                    <CreateForm action={createProgrammeAction} submitLabel="Add">
                       <input type="hidden" name="departmentId" value={dept.id} />
                       <input name="name" required placeholder="e.g. B.Sc. Mathematics" className="flex-1 border border-gray-300 rounded px-2 py-1" />
-                      <button type="submit" className="border border-gray-300 rounded px-2 py-1 hover:bg-gray-100">Add</button>
-                    </form>
+                    </CreateForm>
                   </td>
                 </tr>
               ))}

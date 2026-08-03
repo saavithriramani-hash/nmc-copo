@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useState } from 'react';
 import {
   createUserAction,
   grantRoleAction,
@@ -10,6 +10,7 @@ import {
   type ActionResult,
 } from '@/actions/users';
 import { ROLE_CAPABILITIES, ROLE_KINDS, ROLE_LABELS, scopeFor } from '@/lib/userAdmin';
+import { useServerAction } from './useServerAction';
 import type { RoleKindValue } from '@copo/auth';
 
 export interface RoleView {
@@ -61,7 +62,7 @@ function Feedback({ result }: { result: ActionResult | null }) {
 }
 
 function CreateUser() {
-  const [result, action, pending] = useActionState(createUserAction, null);
+  const { result, pending, onSubmit } = useServerAction(createUserAction, { resetOnSuccess: true });
   return (
     <section className="bg-white border border-gray-300 rounded p-4 space-y-3">
       <div>
@@ -72,7 +73,7 @@ function CreateUser() {
           until you grant one.
         </p>
       </div>
-      <form action={action} className="flex flex-wrap gap-2 items-end">
+      <form onSubmit={onSubmit} className="flex flex-wrap gap-2 items-end">
         <label className="block">
           <span className="block text-xs font-medium text-gray-700 mb-1">Full name</span>
           <input name="fullName" required className="border border-gray-300 rounded px-2 py-1.5 w-64" />
@@ -96,14 +97,14 @@ function CreateUser() {
 }
 
 function GrantRole({ user, departments }: { user: UserView; departments: ScopeOption[] }) {
-  const [result, action, pending] = useActionState(grantRoleAction, null);
+  const { result, pending, onSubmit } = useServerAction(grantRoleAction);
   const [kind, setKind] = useState<RoleKindValue>('FACULTY');
   const scope = scopeFor(kind);
   const options = scope === 'department' ? departments : [];
 
   return (
     <div className="space-y-1">
-      <form action={action} className="flex flex-wrap gap-2 items-end">
+      <form onSubmit={onSubmit} className="flex flex-wrap gap-2 items-end">
         <input type="hidden" name="userId" value={user.id} />
         <label className="block">
           <span className="block text-xs text-gray-600 mb-1">Role</span>
@@ -163,7 +164,7 @@ function GrantRole({ user, departments }: { user: UserView; departments: ScopeOp
 }
 
 function RoleList({ user }: { user: UserView }) {
-  const [result, action, pending] = useActionState(revokeRoleAction, null);
+  const { result, pending, onSubmit } = useServerAction(revokeRoleAction);
   const inForce = user.roles.filter((r) => r.inForce);
   const ended = user.roles.filter((r) => !r.inForce);
 
@@ -182,7 +183,7 @@ function RoleList({ user }: { user: UserView }) {
                 {role.scopeLabel ? <span className="text-gray-600"> — {role.scopeLabel}</span> : null}
                 <span className="text-xs text-gray-500"> ({role.window})</span>
               </span>
-              <form action={action} className="inline">
+              <form onSubmit={onSubmit} className="inline">
                 <input type="hidden" name="roleId" value={role.id} />
                 <button
                   type="submit"
@@ -216,13 +217,13 @@ function RoleList({ user }: { user: UserView }) {
 }
 
 function AccountControls({ user }: { user: UserView }) {
-  const [resetResult, resetAction, resetPending] = useActionState(resetPasswordAction, null);
-  const [activeResult, activeAction, activePending] = useActionState(setActiveAction, null);
+  const { result: resetResult, pending: resetPending, onSubmit: onReset } = useServerAction(resetPasswordAction);
+  const { result: activeResult, pending: activePending, onSubmit: onSetActive } = useServerAction(setActiveAction);
 
   return (
     <div className="space-y-1">
       <div className="flex gap-2">
-        <form action={resetAction}>
+        <form onSubmit={onReset}>
           <input type="hidden" name="userId" value={user.id} />
           <button
             type="submit"
@@ -233,7 +234,7 @@ function AccountControls({ user }: { user: UserView }) {
           </button>
         </form>
         {user.isSelf ? null : (
-          <form action={activeAction}>
+          <form onSubmit={onSetActive}>
             <input type="hidden" name="userId" value={user.id} />
             <input type="hidden" name="activate" value={user.isActive ? 'false' : 'true'} />
             <button

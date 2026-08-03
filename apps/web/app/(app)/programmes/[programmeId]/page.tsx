@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { createBatchAction } from '@/actions/structure';
 import { OutcomeEditor } from '@/components/OutcomeEditor';
+import { CreateForm } from '@/components/CreateForm';
 import { StructureControls } from '@/components/StructureControls';
 import { guard } from '@/lib/authz';
 import { prisma } from '@/lib/db';
@@ -123,13 +124,12 @@ export default async function ProgrammePage({
           </tbody>
         </table>
         {canManageBatches ? (
-          <form action={createBatchAction} className="flex items-center gap-2">
+          <CreateForm action={createBatchAction} submitLabel="Add batch" className="flex items-center gap-2">
             <input type="hidden" name="programmeId" value={programme.id} />
             <input name="startYear" type="number" required placeholder="Start year" className="w-28 border border-gray-300 rounded px-2 py-1" />
             <span className="text-gray-500">–</span>
             <input name="endYear" type="number" required placeholder="End year" className="w-28 border border-gray-300 rounded px-2 py-1" />
-            <button type="submit" className="border border-gray-300 rounded px-2 py-1 hover:bg-gray-100">Add batch</button>
-          </form>
+          </CreateForm>
         ) : null}
       </section>
 

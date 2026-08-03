@@ -1,7 +1,6 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
 import { Prisma } from '@copo/db';
 import { DEFAULT_PARAMETERS } from '@copo/engine';
 import { prisma } from '@/lib/db';
@@ -18,59 +17,104 @@ import {
 
 /** Institution + departments + programmes + batches: FR-1 structure, ADMIN-scoped. */
 
-export async function createInstitutionAction(formData: FormData): Promise<void> {
+/**
+ * The create actions RETURN their errors rather than redirecting with a
+ * `?error=` query string.
+ *
+ * Two reasons, both found the hard way. A duplicate name used to throw
+ * an unhandled unique-constraint violation and replace the page with a
+ * blank error screen — easy to reach, because the forms gave no sign
+ * they were working and pressing Add twice was the obvious response.
+ * And redirecting to report the failure was no better: in a production
+ * build a server action that redirects to its own route leaves the
+ * content area empty, header and navigation only, with the message
+ * nowhere to be seen until the page is reloaded.
+ *
+ * Returning the message is what the rename and delete controls beside
+ * these forms already do, and it puts the explanation next to the field
+ * that caused it.
+ */
+export type CreateResult = { ok?: true; error?: string };
+
+/** True for the `@@unique` violations on Department, Programme and Batch. */
+function isDuplicate(err: unknown): boolean {
+  return err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
+}
+
+export async function createInstitutionAction(_prev: CreateResult | null, formData: FormData): Promise<CreateResult> {
   const user = await requireSession();
   await guard.require(user.userId, { type: 'departments.manage' });
-  if ((await prisma.institution.count()) > 0) redirect('/admin/departments?error=Institution+already+exists');
+  if ((await prisma.institution.count()) > 0) return { error: 'The institution already exists.' };
 
   const name = String(formData.get('name') ?? '').trim();
-  if (!name) redirect('/admin/departments?error=Name+is+required');
+  if (!name) return { error: 'Enter the name of the institution.' };
 
   const P = DEFAULT_PARAMETERS;
-  const created = await prisma.institution.create({
-    data: {
-      name,
-      thresholdFraction: new Prisma.Decimal(P.thresholdFraction),
-      bands: P.bands as unknown as Prisma.InputJsonValue,
-      cohortBands: P.cohortBands as unknown as Prisma.InputJsonValue,
-      weightGroups: P.weightGroups as unknown as Prisma.InputJsonValue,
-      directWeight: new Prisma.Decimal(P.directWeight),
-      indirectWeight: new Prisma.Decimal(P.indirectWeight),
-      targetAttainment: new Prisma.Decimal(P.targetAttainment),
-      feedbackResponseFloor: P.feedbackResponseFloor,
-    },
-  });
+  let created;
+  try {
+    created = await prisma.institution.create({
+      data: {
+        name,
+        thresholdFraction: new Prisma.Decimal(P.thresholdFraction),
+        bands: P.bands as unknown as Prisma.InputJsonValue,
+        cohortBands: P.cohortBands as unknown as Prisma.InputJsonValue,
+        weightGroups: P.weightGroups as unknown as Prisma.InputJsonValue,
+        directWeight: new Prisma.Decimal(P.directWeight),
+        indirectWeight: new Prisma.Decimal(P.indirectWeight),
+        targetAttainment: new Prisma.Decimal(P.targetAttainment),
+        feedbackResponseFloor: P.feedbackResponseFloor,
+      },
+    });
+  } catch (err) {
+    if (isDuplicate(err)) return { error: `An institution called “${name}” already exists.` };
+    throw err;
+  }
   await logAudit({ actorId: user.userId, action: 'INSTITUTION_CREATED', entityType: 'Institution', entityId: created.id, after: { name } });
   revalidatePath('/admin/departments');
+  return { ok: true };
 }
 
-export async function createDepartmentAction(formData: FormData): Promise<void> {
+export async function createDepartmentAction(_prev: CreateResult | null, formData: FormData): Promise<CreateResult> {
   const user = await requireSession();
   await guard.require(user.userId, { type: 'departments.manage' });
 
   const name = String(formData.get('name') ?? '').trim();
-  if (!name) redirect('/admin/departments?error=Name+is+required');
+  if (!name) return { error: 'Enter a department name.' };
 
   const institution = await prisma.institution.findFirst();
-  if (!institution) redirect('/admin/departments?error=Create+the+institution+first');
+  if (!institution) return { error: 'Create the institution first.' };
 
-  const created = await prisma.department.create({ data: { institutionId: institution.id, name } });
+  let created;
+  try {
+    created = await prisma.department.create({ data: { institutionId: institution.id, name } });
+  } catch (err) {
+    if (isDuplicate(err)) return { error: `There is already a department called “${name}”.` };
+    throw err;
+  }
   await logAudit({ actorId: user.userId, action: 'DEPARTMENT_CREATED', entityType: 'Department', entityId: created.id, after: { name } });
   revalidatePath('/admin/departments');
+  return { ok: true };
 }
 
-export async function createProgrammeAction(formData: FormData): Promise<void> {
+export async function createProgrammeAction(_prev: CreateResult | null, formData: FormData): Promise<CreateResult> {
   const user = await requireSession();
   await guard.require(user.userId, { type: 'departments.manage' });
 
   const departmentId = String(formData.get('departmentId') ?? '');
   const name = String(formData.get('name') ?? '').trim();
-  if (!departmentId || !name) redirect('/admin/departments?error=Department+and+name+are+required');
+  if (!departmentId || !name) return { error: 'Enter a programme name.' };
 
-  const created = await prisma.programme.create({ data: { departmentId, name } });
+  let created;
+  try {
+    created = await prisma.programme.create({ data: { departmentId, name } });
+  } catch (err) {
+    if (isDuplicate(err)) return { error: `This department already has a programme called “${name}”.` };
+    throw err;
+  }
   await logAudit({ actorId: user.userId, action: 'PROGRAMME_CREATED', entityType: 'Programme', entityId: created.id, after: { departmentId, name } });
   revalidatePath('/programmes');
   revalidatePath('/admin/departments');
+  return { ok: true };
 }
 
 /**
@@ -80,7 +124,7 @@ export async function createProgrammeAction(formData: FormData): Promise<void> {
  * programme on the server — never taken from the form, which the caller
  * controls.
  */
-export async function createBatchAction(formData: FormData): Promise<void> {
+export async function createBatchAction(_prev: CreateResult | null, formData: FormData): Promise<CreateResult> {
   const user = await requireSession();
 
   const programmeId = String(formData.get('programmeId') ?? '');
@@ -95,13 +139,20 @@ export async function createBatchAction(formData: FormData): Promise<void> {
   const startYear = Number(formData.get('startYear'));
   const endYear = Number(formData.get('endYear'));
   if (!Number.isInteger(startYear) || !Number.isInteger(endYear) || endYear <= startYear) {
-    redirect(`/programmes/${programmeId}?error=Valid+start+and+end+years+are+required`);
+    return { error: 'Enter a start year and a later end year.' };
   }
 
   const name = `${startYear}–${endYear}`;
-  const created = await prisma.batch.create({ data: { programmeId, name, startYear, endYear } });
+  let created;
+  try {
+    created = await prisma.batch.create({ data: { programmeId, name, startYear, endYear } });
+  } catch (err) {
+    if (isDuplicate(err)) return { error: `This programme already has a ${name} batch.` };
+    throw err;
+  }
   await logAudit({ actorId: user.userId, action: 'BATCH_CREATED', entityType: 'Batch', entityId: created.id, after: { programmeId, name } });
   revalidatePath(`/programmes/${programmeId}`);
+  return { ok: true };
 }
 
 /** PO/PSO definitions (FR-2) — the HoD of the programme's department. Replace-all save. */
