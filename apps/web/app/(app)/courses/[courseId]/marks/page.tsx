@@ -1,12 +1,15 @@
 import Link from 'next/link';
 import { assessmentMarkSummary } from '@copo/db';
+import { CourseMarkImport } from '@/components/CourseMarkImport';
+import { guard } from '@/lib/authz';
 import { prisma } from '@/lib/db';
 import { requireSession } from '@/lib/session';
 
 /** Marks tab: pick an assessment to enter marks for. */
 export default async function MarksIndexPage({ params }: { params: Promise<{ courseId: string }> }) {
-  await requireSession();
+  const user = await requireSession();
   const { courseId } = await params;
+  const canWrite = (await guard.check(user.userId, { type: 'marks.write', courseId })).allow;
 
   const course = await prisma.course.findUniqueOrThrow({
     where: { id: courseId },
@@ -81,6 +84,11 @@ export default async function MarksIndexPage({ params }: { params: Promise<{ cou
       <p className="text-xs text-gray-500">
         “Marks entered” counts attempted cells; blanks are deliberate (did not attempt) and are not counted.
       </p>
+
+      {/* Below the list, not above it: entering marks assessment by
+          assessment is the normal path, and the workbook is the bulk
+          alternative for someone who already has the figures to hand. */}
+      {canWrite && course.assessments.length > 0 ? <CourseMarkImport courseId={courseId} /> : null}
     </div>
   );
 }

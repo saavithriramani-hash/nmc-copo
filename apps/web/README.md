@@ -37,7 +37,7 @@ course-setup cloning.
 | `…/assessments/[id]` | Structure editor: unlimited user-named sections (with an "answer any n of m" rule), item tables with per-item CO tags, single-score CO tag checkboxes |
 | `/batches/[id]/roster` | Roster import from Excel/CSV with a full preview; roster list (HoD/admin). **Download a blank template** (`/api/batches/[id]/roster/template`, `roster.manage` — the same authority as the import it feeds): CSV with a BOM so Excel reads UTF-8, headers the importer actually matches, two example rows showing the with-email and without-email shapes, and `#` guidance lines the parser skips. **Blank, unlike the mark template, which is deliberately pre-filled** — roster import only ever creates, so there is nothing for an empty file to destroy, and a pre-filled one would put 4,000 names on somebody's laptop |
 | `…/enrolment` | Draw a course's students from the batch roster — tick names, never type register numbers |
-| `…/marks` → `…/marks/[id]` | Assessment picker → the mark entry grid + paste/upload |
+| `…/marks` → `…/marks/[id]` | Assessment picker → the mark entry grid + paste/upload. The picker also carries **all assessments in one file**: download a course-wide workbook (a sheet per assessment) and upload it back, previewed and applied all-or-nothing |
 | `…/feedback` | **CO-wise indirect feedback (Step 8)** — the 3-point tally per outcome, entered as aggregate counts. `course.write`, like COs and assessments. The indirect value previews live via the engine's own `step8IndirectAttainment`. A blank row is stored as **no row**, so the engine yields `null` and the course reports direct-only; it is never a rating of zero |
 | `…/review` | Pre-calculation anomaly report (FR-13), the six checks |
 | `…/attainment` | Computed attainment, prominent warnings, workflow controls, and the full drill-down |
@@ -109,6 +109,21 @@ course-setup cloning.
 - **Paste or upload** one assessment's marks (`lib/marks.ts` pure planner),
   matched on register number, with **every** change previewed (old → new)
   before a row is written; empty cells import as blank.
+- **Download one workbook for the whole course**
+  (`/api/courses/[id]/marks/template`, `marks.write`) — a sheet per
+  assessment, students down, questions across, **carrying every mark
+  already recorded**, plus an Instructions sheet first. Fill in any or
+  all of the sheets and upload it back on the Marks tab. Sheets are
+  matched to assessments by name, re-derived at upload from the current
+  assessments: a sheet matching nothing is **reported, never guessed**,
+  because writing one assessment's marks onto another is the failure to
+  avoid — so an assessment renamed after downloading shows up as an
+  ignored sheet. Excel caps a sheet name at 31 characters and forbids
+  `: \ / ? * [ ]`, so names are sanitised and de-duplicated ("Continuous
+  Internal Assessment I" and "…II" both clip to the same 31). The
+  preview groups changes by assessment; **the import is applied in one
+  transaction, all of it or none**, since "three of eight assessments
+  applied" is not a state anyone can reason about before a lock.
 - **Download the mark sheet** for an assessment
   (`/api/courses/[id]/assessments/[id]/template`, `marks.write`): every
   enrolled student down, every question across, **carrying the marks

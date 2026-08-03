@@ -21,8 +21,16 @@ export interface MarkUpsert {
   value: number | null;
 }
 
+/**
+ * Anything that can run the statement: the client itself, or a
+ * transaction handle. The course-wide mark import applies several
+ * assessments in one transaction — all of them or none — and cannot do
+ * that if this insists on the top-level client.
+ */
+export type MarkWriter = Pick<PrismaClient, '$executeRaw'>;
+
 /** Upserts marks in batches. Returns the number of rows written. */
-export async function bulkUpsertMarks(prisma: PrismaClient, cells: MarkUpsert[], batchSize = 500): Promise<number> {
+export async function bulkUpsertMarks(prisma: MarkWriter, cells: MarkUpsert[], batchSize = 500): Promise<number> {
   let written = 0;
   for (let start = 0; start < cells.length; start += batchSize) {
     const batch = cells.slice(start, start + batchSize);

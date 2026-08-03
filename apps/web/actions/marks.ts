@@ -6,8 +6,9 @@ import { prisma } from '@/lib/db';
 import { guard } from '@/lib/authz';
 import { logAudit } from '@/lib/audit';
 import { requireSession } from '@/lib/session';
-import { decodeSpreadsheet } from '@/lib/spreadsheet';
+import { decodeSpreadsheet, decodeWorkbookSheets } from '@/lib/spreadsheet';
 import { parseDelimited } from '@/lib/delimited';
+import { planCourseImport, type CourseImportPlan } from '@/lib/courseWorkbook';
 import { planMarkImport, type MarkImportPlan } from '@/lib/marks';
 
 export interface MarkCellInput {
@@ -147,6 +148,168 @@ export async function previewMarkImportAction(
   if (grid.length < 2) return { ok: false, error: 'Need a header row (register number + item labels) and at least one student row.' };
 
   return { ok: true, plan: await buildImportPlan(assessmentId, grid) };
+}
+
+// ── FR-12: the whole course in one workbook ─────────────────────────────
+
+export interface CourseMarkImportPreview {
+  ok: boolean;
+  error?: string;
+  fileName?: string;
+  plan?: CourseImportPlan;
+}
+
+/**
+ * Everything the course-wide planner needs, loaded once.
+ *
+ * Assessments with no questions are excluded: they have no columns to
+ * receive marks, they get no sheet in the downloaded workbook, and
+ * including them here would report them as sheets somebody forgot.
+ */
+async function loadCourseImportContext(courseId: string) {
+  const assessments = await prisma.assessment.findMany({
+    where: { courseId },
+    orderBy: { displayOrder: 'asc' },
+    select: {
+      id: true,
+      name: true,
+      items: { orderBy: { displayOrder: 'asc' }, select: { id: true, label: true, maxMark: true } },
+    },
+  });
+  const enrolments = await prisma.enrolment.findMany({
+    where: { courseId },
+    select: { id: true, rosterEntry: { select: { registerNumber: true, student: { select: { fullName: true } } } } },
+  });
+
+  const withItems = assessments.filter((assessment) => assessment.items.length > 0);
+  const existing = new Map<string, number | null>();
+  for (const assessment of withItems) {
+    for (const mark of await marksForAssessment(prisma, assessment.id)) {
+      existing.set(`${mark.enrolmentId}:${mark.itemId}`, mark.value);
+    }
+  }
+
+  return {
+    assessments: withItems.map((assessment) => ({
+      id: assessment.id,
+      name: assessment.name,
+      items: assessment.items.map((item) => ({ id: item.id, label: item.label, maxMark: item.maxMark.toNumber() })),
+    })),
+    enrolments: enrolments.map((e) => ({
+      enrolmentId: e.id,
+      registerNumber: e.rosterEntry.registerNumber,
+      studentName: e.rosterEntry.student.fullName,
+    })),
+    existing,
+  };
+}
+
+/** Preview an uploaded course workbook. Writes nothing. */
+export async function previewCourseMarkImportAction(
+  courseId: string,
+  formData: FormData,
+): Promise<CourseMarkImportPreview> {
+  const user = await requireSession();
+  await guard.require(user.userId, { type: 'marks.write', courseId });
+
+  const file = formData.get('file');
+  if (!(file instanceof File) || file.size === 0) return { ok: false, error: 'Choose the course mark workbook.' };
+  if (file.size > 10 * 1024 * 1024) return { ok: false, error: 'File is larger than 10 MB.' };
+
+  let sheets: Map<string, string[][]>;
+  try {
+    sheets = await decodeWorkbookSheets(file);
+  } catch {
+    return { ok: false, error: 'Could not read the file. Upload the .xlsx workbook downloaded from this page.' };
+  }
+  if (sheets.size === 0) {
+    return {
+      ok: false,
+      error:
+        'This is not an Excel workbook. The course workbook carries one sheet per assessment, which a CSV cannot — download it from this page, fill it in, and upload that.',
+    };
+  }
+
+  const context = await loadCourseImportContext(courseId);
+  if (context.assessments.length === 0) {
+    return { ok: false, error: 'No assessment in this course has any questions yet.' };
+  }
+
+  return { ok: true, fileName: file.name, plan: planCourseImport({ sheets, ...context }) };
+}
+
+/**
+ * Applies a previewed course workbook — **all of it or none of it**.
+ *
+ * Every assessment is written inside one transaction, so an upload can
+ * never leave a course half-imported: with several assessments feeding
+ * one attainment figure, "three of eight applied" is a state nobody could
+ * reason about before a lock. Validation is the same as the single-sheet
+ * path — enrolment ∈ course, item ∈ assessment, value ∈ [0, max] or blank
+ * — and here a single rejected cell aborts the lot rather than being
+ * reported afterwards, because the caller has already been shown and has
+ * confirmed exactly these changes.
+ */
+export async function commitCourseMarkImportAction(
+  courseId: string,
+  changes: { assessmentId: string; cells: MarkCellInput[] }[],
+): Promise<{ ok: boolean; applied?: number; assessments?: number; error?: string }> {
+  const user = await requireSession();
+  await guard.require(user.userId, { type: 'marks.write', courseId });
+
+  const wanted = changes.filter((entry) => entry.cells.length > 0);
+  if (wanted.length === 0) return { ok: false, error: 'Nothing to import.' };
+
+  // Re-derive what is legitimate from the database rather than trusting
+  // the payload: the preview it came from is a client-side object.
+  const assessments = await prisma.assessment.findMany({
+    where: { courseId, id: { in: wanted.map((entry) => entry.assessmentId) } },
+    select: { id: true, name: true, items: { select: { id: true, maxMark: true } } },
+  });
+  const byId = new Map(assessments.map((assessment) => [assessment.id, assessment]));
+  const enrolmentIds = new Set(
+    (await prisma.enrolment.findMany({ where: { courseId }, select: { id: true } })).map((e) => e.id),
+  );
+
+  const perAssessment: { assessmentId: string; name: string; cells: MarkUpsert[] }[] = [];
+  for (const entry of wanted) {
+    const assessment = byId.get(entry.assessmentId);
+    if (!assessment) return { ok: false, error: 'That workbook refers to an assessment this course does not have. Download it again.' };
+    const itemMax = new Map(assessment.items.map((item) => [item.id, item.maxMark.toNumber()]));
+
+    const cells: MarkUpsert[] = [];
+    for (const cell of entry.cells) {
+      const max = itemMax.get(cell.itemId);
+      if (max === undefined || !enrolmentIds.has(cell.enrolmentId)) {
+        return { ok: false, error: `A mark in “${assessment.name}” does not belong to this course. Nothing was imported.` };
+      }
+      if (cell.value !== null && (!Number.isFinite(cell.value) || cell.value < 0 || cell.value > max)) {
+        return { ok: false, error: `A mark in “${assessment.name}” is outside its question's range. Nothing was imported.` };
+      }
+      cells.push({ enrolmentId: cell.enrolmentId, itemId: cell.itemId, assessmentId: assessment.id, courseId, value: cell.value });
+    }
+    perAssessment.push({ assessmentId: assessment.id, name: assessment.name, cells });
+  }
+
+  const applied = perAssessment.reduce((sum, entry) => sum + entry.cells.length, 0);
+  await prisma.$transaction(async (tx) => {
+    for (const entry of perAssessment) await bulkUpsertMarks(tx, entry.cells);
+  });
+
+  // One entry per assessment, so the log keeps the entity linkage the
+  // single-sheet import already writes; the shared marker ties them
+  // together as one upload.
+  for (const entry of perAssessment) {
+    await logAudit({
+      actorId: user.userId,
+      action: 'MARKS_IMPORTED',
+      entityType: 'Assessment',
+      entityId: entry.assessmentId,
+      after: { applied: entry.cells.length, viaCourseWorkbook: true },
+    });
+  }
+  revalidatePath(`/courses/${courseId}/marks`);
+  return { ok: true, applied, assessments: perAssessment.length };
 }
 
 /** Applies the confirmed changes from a previewed import via the same validated save path. */
