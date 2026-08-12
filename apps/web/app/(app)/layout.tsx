@@ -19,7 +19,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const badges = describeRoles(user.roles);
 
   const nav: { href: string; label: string; show: boolean }[] = [
-    { href: '/', label: 'Courses', show: true },
+    { href: '/', label: 'Dashboard', show: true },
+    { href: '/courses', label: 'Courses', show: true },
     { href: '/programmes', label: 'Programmes', show: true },
     { href: '/institution', label: 'Institution', show: readsInstitution },
     // CR-3: the COE publishes the external examination pattern here too.

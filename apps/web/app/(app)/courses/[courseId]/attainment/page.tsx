@@ -2,9 +2,11 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { DownloadButton } from '@/components/DownloadButton';
 import { DrillDown } from '@/components/DrillDown';
+import { ReviewHistory } from '@/components/ReviewHistory';
 import { WorkflowPanel } from '@/components/WorkflowPanel';
 import { guard } from '@/lib/authz';
 import { getCourseAttainment } from '@/lib/compute';
+import { roundsForCourse } from '@/lib/dashboard';
 import { prisma } from '@/lib/db';
 import { requireSession } from '@/lib/session';
 import { warningsFingerprint } from '@/lib/versionDiff';
@@ -19,11 +21,13 @@ export default async function AttainmentPage({ params }: { params: Promise<{ cou
   const { courseId } = await params;
 
   const course = await prisma.course.findUniqueOrThrow({ where: { id: courseId }, select: { status: true, code: true } });
-  const [canSubmit, canLock, canUnlock, canSeeMarks] = await Promise.all([
+  const [canSubmit, canLock, canReturn, canUnlock, canSeeMarks, rounds] = await Promise.all([
     guard.check(user.userId, { type: 'course.submit', courseId }).then((d) => d.allow),
     guard.check(user.userId, { type: 'course.lock', courseId }).then((d) => d.allow),
+    guard.check(user.userId, { type: 'course.return', courseId }).then((d) => d.allow),
     guard.check(user.userId, { type: 'course.unlock', courseId }).then((d) => d.allow),
     guard.check(user.userId, { type: 'marks.read', courseId }).then((d) => d.allow),
+    roundsForCourse(courseId),
   ]);
 
   let attainment;
@@ -106,8 +110,11 @@ export default async function AttainmentPage({ params }: { params: Promise<{ cou
         fingerprint={fingerprint}
         canSubmit={canSubmit}
         canLock={canLock}
+        canReturn={canReturn}
         canUnlock={canUnlock}
       />
+
+      <ReviewHistory rounds={rounds} />
 
       {/* CO summary */}
       <section className="space-y-1">

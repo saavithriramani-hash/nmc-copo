@@ -22,7 +22,13 @@ export async function submitCourseAction(courseId: string): Promise<{ ok: boolea
   await guard.require(user.userId, { type: 'course.submit', courseId });
 
   const before = await prisma.course.findUniqueOrThrow({ where: { id: courseId }, select: { status: true } });
-  await prisma.course.update({ where: { id: courseId }, data: { status: 'SUBMITTED' } });
+  // Status and round move together: a SUBMITTED course with no round
+  // open would be invisible to the HoD's queue, which is built from the
+  // rounds rather than from the status.
+  await prisma.$transaction([
+    prisma.course.update({ where: { id: courseId }, data: { status: 'SUBMITTED' } }),
+    prisma.courseSubmission.create({ data: { courseId, submittedById: user.userId } }),
+  ]);
   await logAudit({
     actorId: user.userId,
     action: 'COURSE_SUBMITTED',
@@ -32,6 +38,73 @@ export async function submitCourseAction(courseId: string): Promise<{ ok: boolea
     after: { status: 'SUBMITTED' },
   });
   revalidatePath(`/courses/${courseId}`, 'layout');
+  revalidatePath('/');
+  return { ok: true };
+}
+
+/**
+ * FR-16, the other outcome of a review: send the submission back with
+ * the reason it was not approved.
+ *
+ * The workflow had no such move — a HoD could approve or say nothing, so
+ * "please fix the CO tags" happened outside the system and left no
+ * trace. The reason is required, recorded on the round, and never edited
+ * afterwards: it is part of how the course eventually came to be
+ * approved.
+ *
+ * The course goes back to DRAFT so its faculty can actually act on the
+ * note; while SUBMITTED they are frozen out by design.
+ */
+export async function returnCourseAction(
+  courseId: string,
+  comment: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireSession();
+  await guard.require(user.userId, { type: 'course.return', courseId });
+
+  const reason = comment.trim();
+  if (reason.length < 5) {
+    return { ok: false, error: 'Say what needs changing — the faculty member sees this, and it is kept with the course.' };
+  }
+
+  const round = await prisma.courseSubmission.findFirst({
+    where: { courseId, resolution: 'PENDING' },
+    orderBy: { submittedAt: 'desc' },
+  });
+
+  await prisma.$transaction([
+    prisma.course.update({ where: { id: courseId }, data: { status: 'DRAFT' } }),
+    // A course submitted before review rounds existed has none open, so
+    // one is written now rather than losing the fact that it was
+    // returned. `submittedById` falls back to the returner because the
+    // original submitter is unknowable at this point.
+    round
+      ? prisma.courseSubmission.update({
+          where: { id: round.id },
+          data: { resolution: 'RETURNED', resolvedById: user.userId, resolvedAt: new Date(), returnComment: reason },
+        })
+      : prisma.courseSubmission.create({
+          data: {
+            courseId,
+            submittedById: user.userId,
+            resolution: 'RETURNED',
+            resolvedById: user.userId,
+            resolvedAt: new Date(),
+            returnComment: reason,
+          },
+        }),
+  ]);
+
+  await logAudit({
+    actorId: user.userId,
+    action: 'COURSE_RETURNED',
+    entityType: 'Course',
+    entityId: courseId,
+    before: { status: 'SUBMITTED' },
+    after: { status: 'DRAFT', comment: reason },
+  });
+  revalidatePath(`/courses/${courseId}`, 'layout');
+  revalidatePath('/');
   return { ok: true };
 }
 
@@ -95,6 +168,35 @@ export async function lockCourseAction(
       },
     });
     await tx.course.update({ where: { id: courseId }, data: { status: 'LOCKED' } });
+
+    // Close the review round, tying it to the version it produced, so
+    // the history reads "submitted, approved, version 2" rather than
+    // leaving a round open for ever.
+    const round = await tx.courseSubmission.findFirst({
+      where: { courseId, resolution: 'PENDING' },
+      orderBy: { submittedAt: 'desc' },
+      select: { id: true },
+    });
+    if (round) {
+      await tx.courseSubmission.update({
+        where: { id: round.id },
+        data: { resolution: 'APPROVED', resolvedById: user.userId, resolvedAt: new Date(), approvedVersion: version },
+      });
+    } else {
+      // A HoD may submit and lock in one sitting, and courses locked
+      // before rounds existed have none. Record the round anyway so
+      // every approval has a review behind it in the file.
+      await tx.courseSubmission.create({
+        data: {
+          courseId,
+          submittedById: user.userId,
+          resolution: 'APPROVED',
+          resolvedById: user.userId,
+          resolvedAt: new Date(),
+          approvedVersion: version,
+        },
+      });
+    }
   });
 
   await logAudit({
@@ -106,6 +208,7 @@ export async function lockCourseAction(
     after: { status: 'LOCKED', version, engineVersion: ENGINE_VERSION, warningsAcknowledged: warnings.length },
   });
   revalidatePath(`/courses/${courseId}`, 'layout');
+  revalidatePath('/');
   return { ok: true, version };
 }
 

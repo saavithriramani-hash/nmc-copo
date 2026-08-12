@@ -24,6 +24,7 @@ export type CourseActionType =
   | 'marks.external.write' // enter marks for one
   | 'course.submit' // faculty → HoD (FR-16)
   | 'course.lock' // HoD approves and locks → immutable snapshot
+  | 'course.return' // HoD sends a submission back, with the reason (FR-16)
   | 'course.unlock' // HoD; creates a new version, never rewrites
   | 'settings.course.write'; // course-level parameter override (minuted exception)
 
@@ -69,6 +70,7 @@ export const COURSE_ACTION_TYPES: readonly CourseActionType[] = [
   'marks.read',
   'marks.write',
   'course.submit',
+  'course.return',
   'course.lock',
   'course.unlock',
   'settings.course.write',

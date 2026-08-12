@@ -267,6 +267,7 @@ model Course {
   enrolments  Enrolment[]
   instructors CourseInstructor[]
   snapshots   AttainmentSnapshot[]
+  submissions CourseSubmission[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -480,6 +481,58 @@ model IndirectFeedback {
 /// the computation byte for byte. A trigger in the initial migration
 /// rejects UPDATE and DELETE — unlocking a course creates a NEW version
 /// (FR-16), it never rewrites history.
+/// One round of review (FR-16): a course submitted for approval, and what
+/// the Head of Department did with it.
+///
+/// A row per round rather than a comment thread, because the college
+/// asked for exactly one thing — the HoD's reason for NOT approving —
+/// and because the sequence of rounds is itself the evidence an auditor
+/// wants: submitted three times, returned twice, and here is why each
+/// time. A thread would record the same words with none of that shape.
+///
+/// Append-only in spirit: `returnComment` is written once, when the
+/// round is returned, and never edited afterwards. It is part of how a
+/// locked course came to be approved, and neither party may rewrite it —
+/// the same reasoning that keeps the audit log immutable.
+model CourseSubmission {
+  id       String @id @default(cuid())
+  courseId String
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Restrict)
+
+  submittedById String
+  submittedBy   User     @relation("SubmittedBy", fields: [submittedById], references: [id], onDelete: Restrict)
+  submittedAt   DateTime @default(now())
+
+  resolution   SubmissionResolution @default(PENDING)
+  resolvedById String?
+  resolvedBy   User?                @relation("ResolvedBy", fields: [resolvedById], references: [id], onDelete: Restrict)
+  resolvedAt   DateTime?
+
+  /// The HoD's reason for sending it back. Required when RETURNED,
+  /// null otherwise — enforced by a CHECK constraint in the migration,
+  /// because a returned round with no explanation is the one state this
+  /// feature exists to prevent.
+  returnComment String?
+
+  /// The version written when the round was approved, so the review and
+  /// the immutable snapshot it produced can be read together.
+  approvedVersion Int?
+
+  @@index([courseId, submittedAt])
+  // The dashboards' hot query: "what is waiting for me?" across a
+  // department, answered from this index without touching a mark.
+  @@index([resolution, submittedAt])
+}
+
+enum SubmissionResolution {
+  /// Submitted and awaiting the HoD.
+  PENDING
+  /// Sent back for changes, with a reason. The course returns to DRAFT.
+  RETURNED
+  /// Approved and locked.
+  APPROVED
+}
+
 model AttainmentSnapshot {
   id            String   @id @default(cuid())
   courseId      String
@@ -515,6 +568,10 @@ model User {
   auditEvents AuditLog[]
   sessions    Session[]
   jobs        Job[]
+  // Two sides of the same review: what this person sent for approval,
+  // and what they approved or sent back.
+  submitted CourseSubmission[] @relation("SubmittedBy")
+  resolved  CourseSubmission[] @relation("ResolvedBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

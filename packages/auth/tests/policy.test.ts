@@ -68,6 +68,18 @@ describe('policy — faculty scope: own courses only (§2)', () => {
     expect(decide(facultyMath1, courseAction('course.unlock', 'c-math-1'), locked).allow).toBe(false);
   });
 
+  it('never sends their own submission back to themselves (CR-4)', () => {
+    // Returning is the reviewer's decision, not the submitter's. Were it
+    // otherwise, a faculty member could withdraw a submission by writing
+    // themselves a note, and the review history would record a query the
+    // HoD never raised.
+    const submitted = course({ status: 'SUBMITTED' });
+    expect(decide(facultyMath1, courseAction('course.return', 'c-math-1'), submitted)).toEqual({
+      allow: false,
+      reason: 'OUT_OF_SCOPE',
+    });
+  });
+
   it('is frozen out of edits once submitted, and everyone is on LOCKED', () => {
     const submitted = course({ status: 'SUBMITTED' });
     expect(decide(facultyMath1, courseAction('marks.write', 'c-math-1'), submitted)).toEqual({
@@ -113,6 +125,27 @@ describe('policy — HoD scope: all courses in their department (§2)', () => {
 
     const submittedPhys = course({ ...C_PHYS_1, status: 'SUBMITTED' });
     expect(decide(hodMath, courseAction('course.lock', 'c-phys-1'), submittedPhys).allow).toBe(false);
+  });
+
+  it('sends a SUBMITTED course back instead of locking it — the same authority, the same moment (CR-4)', () => {
+    const submitted = course({ status: 'SUBMITTED' });
+    expect(decide(hodMath, courseAction('course.return', 'c-math-1'), submitted)).toEqual({ allow: true, via: 'HOD' });
+
+    // Approve and send-back are the two outcomes of one decision, so
+    // they open and close together: there is nothing to send back before
+    // a submission, and nothing to reconsider after a lock.
+    // WRONG_STATUS in both directions, including LOCKED: like lock and
+    // unlock, this action is defined by the status it acts on, so the
+    // status is what the denial names.
+    for (const status of ['DRAFT', 'LOCKED'] as const) {
+      expect(decide(hodMath, courseAction('course.return', 'c-math-1'), course({ status })), status).toEqual({
+        allow: false,
+        reason: 'WRONG_STATUS',
+      });
+    }
+
+    const submittedPhys = course({ ...C_PHYS_1, status: 'SUBMITTED' });
+    expect(decide(hodMath, courseAction('course.return', 'c-phys-1'), submittedPhys).allow).toBe(false);
   });
 
   it("denies EVERY course action on the other department's courses", () => {

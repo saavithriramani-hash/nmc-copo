@@ -65,6 +65,7 @@ export function decide(actor: ActorContext, action: Action, resource: ResourceCo
     case 'marks.write':
     case 'course.submit':
     case 'course.lock':
+    case 'course.return':
     case 'course.unlock':
     case 'settings.course.write': {
       if (resource?.kind !== 'course') return deny('RESOURCE_NOT_FOUND');
@@ -274,6 +275,15 @@ function decideCourse(
 
     case 'course.lock': {
       // FR-16: faculty submits → HoD reviews and locks.
+      if (course.status !== 'SUBMITTED') return deny('WRONG_STATUS');
+      return hod ? allow('HOD') : deny('OUT_OF_SCOPE');
+    }
+
+    case 'course.return': {
+      // The other half of reviewing, which the workflow lacked: sending
+      // a submission back with the reason it was not approved. Same
+      // authority and same moment as locking — the HoD, on a SUBMITTED
+      // course — because they are the two outcomes of one decision.
       if (course.status !== 'SUBMITTED') return deny('WRONG_STATUS');
       return hod ? allow('HOD') : deny('OUT_OF_SCOPE');
     }

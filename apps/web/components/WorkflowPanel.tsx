@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import type { EngineWarning } from '@copo/engine';
-import { lockCourseAction, submitCourseAction, unlockCourseAction } from '@/actions/workflow';
+import { lockCourseAction, returnCourseAction, submitCourseAction, unlockCourseAction } from '@/actions/workflow';
 
 /**
  * The approval workflow controls (FR-16). A course with engine warnings
@@ -18,6 +18,7 @@ export function WorkflowPanel({
   fingerprint,
   canSubmit,
   canLock,
+  canReturn,
   canUnlock,
 }: {
   courseId: string;
@@ -26,11 +27,14 @@ export function WorkflowPanel({
   fingerprint: string;
   canSubmit: boolean;
   canLock: boolean;
+  canReturn: boolean;
   canUnlock: boolean;
 }) {
   const router = useRouter();
   const [acknowledged, setAcknowledged] = useState(false);
   const [reason, setReason] = useState('');
+  const [comment, setComment] = useState('');
+  const [returning, setReturning] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   /**
@@ -38,17 +42,28 @@ export function WorkflowPanel({
    * so. Locking recomputes the course and writes an immutable snapshot;
    * a dimmed button with an unchanged label reads as a frozen page.
    */
-  const [busy, setBusy] = useState<'submit' | 'lock' | 'unlock' | null>(null);
+  const [busy, setBusy] = useState<'submit' | 'lock' | 'return' | 'unlock' | null>(null);
 
-  const run = (kind: 'submit' | 'lock' | 'unlock', fn: () => Promise<{ ok: boolean; error?: string; version?: number }>) => {
+  const run = (
+    kind: 'submit' | 'lock' | 'return' | 'unlock',
+    fn: () => Promise<{ ok: boolean; error?: string; version?: number }>,
+  ) => {
     setBusy(kind);
     startTransition(async () => {
       try {
         const result = await fn();
         if (result.ok) {
-          setMessage(result.version ? `Locked as version ${result.version}.` : 'Done.');
+          setMessage(
+            result.version
+              ? `Locked as version ${result.version}.`
+              : kind === 'return'
+                ? 'Sent back to the course faculty with your comment.'
+                : 'Done.',
+          );
           setAcknowledged(false);
           setReason('');
+          setComment('');
+          setReturning(false);
           router.refresh();
         } else {
           setMessage(result.error ?? 'Could not complete.');
@@ -110,6 +125,17 @@ export function WorkflowPanel({
           </button>
         ) : null}
 
+        {canReturn && !returning ? (
+          <button
+            type="button"
+            onClick={() => setReturning(true)}
+            disabled={pending}
+            className="border border-amber-400 text-amber-900 bg-amber-50 rounded px-3 py-1.5 hover:bg-amber-100 disabled:opacity-50"
+          >
+            Send back for changes
+          </button>
+        ) : null}
+
         {canUnlock ? (
           <>
             <input
@@ -129,6 +155,54 @@ export function WorkflowPanel({
           </>
         ) : null}
       </div>
+
+      {/*
+        The comment is a textarea, not the one-line input the unlock
+        reason uses: "recompute Test 2 — Q4 is tagged to CO3 but examines
+        CO2, and three students have blanks that should be zeros" is what
+        a HoD actually needs to write, and it is the whole point of
+        returning rather than telephoning.
+      */}
+      {canReturn && returning ? (
+        <div className="border border-amber-300 bg-amber-50 rounded p-3 space-y-2">
+          <label className="block text-sm font-medium" htmlFor="return-comment">
+            What needs to change before you can approve this?
+          </label>
+          <textarea
+            id="return-comment"
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            rows={3}
+            placeholder="e.g. Q4 of Test 2 is tagged to CO3 but examines CO2. Please re-tag and resubmit."
+            className="w-full border border-gray-300 rounded px-2 py-1.5 bg-white"
+          />
+          <p className="text-xs text-gray-600">
+            The course faculty see this on their dashboard, and it is kept with the course as part of how it came to be
+            approved. It cannot be edited afterwards.
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => run('return', () => returnCourseAction(courseId, comment))}
+              disabled={pending || comment.trim().length < 5}
+              className="bg-amber-700 text-white rounded px-3 py-1.5 hover:bg-amber-800 disabled:opacity-50"
+            >
+              {busy === 'return' ? 'Sending back…' : 'Send back for changes'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setReturning(false);
+                setComment('');
+              }}
+              disabled={pending}
+              className="border border-gray-300 rounded px-3 py-1.5 hover:bg-gray-100 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {message ? <p className="text-sm text-gray-800 bg-gray-100 border border-gray-200 rounded px-3 py-2">{message}</p> : null}
       {status === 'LOCKED' ? (
