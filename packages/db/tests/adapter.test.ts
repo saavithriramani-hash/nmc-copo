@@ -51,6 +51,9 @@ function fixtureCourse(overrides: CourseOverrides = {}): CourseForInput {
     semester: 3,
     credits: D('4'),
     status: 'DRAFT',
+    // CR-3: a theory paper. Authorisation only — the adapter and the
+    // engine behind it are indifferent to the flag.
+    isLaboratory: false,
     ...NULL_OVERRIDES,
     createdAt: NOW,
     updatedAt: NOW,

@@ -30,11 +30,16 @@ export const course = (over: Partial<CourseResource> = {}): CourseResource => ({
   departmentId: 'dept-math',
   status: 'DRAFT',
   instructorIds: ['fac-math-1'],
+  // A theory paper unless a test says otherwise, which is what every
+  // course in the college was before CR-3.
+  isLaboratory: false,
   ...over,
 });
 
 export const C_MATH_1 = course();
 export const C_MATH_2 = course({ courseId: 'c-math-2', instructorIds: ['fac-math-2'] });
+/** CR-3: a practical paper — its external examination belongs to the department. */
+export const C_MATH_LAB = course({ courseId: 'c-math-lab', isLaboratory: true });
 export const C_PHYS_1 = course({
   courseId: 'c-phys-1',
   programmeId: 'prog-phys',
@@ -66,6 +71,8 @@ export const dean = actor('dean-1', [{ kind: 'DEAN', departmentId: null }]);
 export const iqac = actor('iqac-1', [{ kind: 'IQAC', departmentId: null }]);
 export const principal = actor('principal-1', [{ kind: 'PRINCIPAL', departmentId: null }]);
 export const admin = actor('admin-1', [{ kind: 'ADMIN', departmentId: null }]);
+/** CR-3: the Controller of Examinations — institution-wide, like the Dean. */
+export const coe = actor('coe-1', [{ kind: 'COE', departmentId: null }]);
 
 /**
  * In-memory ContextSource for Guard tests: the same world, reachable the

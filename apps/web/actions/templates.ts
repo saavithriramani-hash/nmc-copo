@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { Prisma } from '@copo/db';
 import { prisma } from '@/lib/db';
-import { guard } from '@/lib/authz';
+import { EXTERNAL_WEIGHT_GROUP, guard, requireAssessmentWrite } from '@/lib/authz';
 import { logAudit } from '@/lib/audit';
 import { applyPattern, capturePattern, parsePattern } from '@/lib/setupPlans';
 import { requireSession } from '@/lib/session';
@@ -23,22 +23,52 @@ async function departmentOfCourse(courseId: string): Promise<string> {
  */
 export async function saveTemplateFromCourseAction(courseId: string, formData: FormData): Promise<void> {
   const user = await requireSession();
-  const departmentId = await departmentOfCourse(courseId);
-  await guard.require(user.userId, { type: 'templates.manage', departmentId });
+  const courseDepartmentId = await departmentOfCourse(courseId);
   await guard.require(user.userId, { type: 'course.read', courseId });
+
+  /**
+   * CR-3. "All departments" publishes the examination pattern the whole
+   * college adopts, which only the COE may do; anything else is a
+   * department's own pattern, captured by its HoD.
+   */
+  const institutionWide = String(formData.get('scope') ?? '') === 'institution';
+  const departmentId = institutionWide ? null : courseDepartmentId;
+  await requireTemplateWrite(user.userId, departmentId);
 
   const name = String(formData.get('name') ?? '').trim();
   const back = `/courses/${courseId}/assessments`;
   if (!name) redirect(`${back}?error=Give+the+template+a+name`);
 
-  const [cos, assessments] = await Promise.all([
+  const [cos, allAssessments] = await Promise.all([
     prisma.courseOutcome.findMany({ where: { courseId }, select: { id: true, displayOrder: true } }),
     prisma.assessment.findMany({
       where: { courseId },
       include: { sections: true, items: true, coTags: true },
     }),
   ]);
-  if (assessments.length === 0) redirect(`${back}?error=This+course+has+no+assessments+to+capture`);
+
+  /**
+   * An institution-wide template carries the EXTERNAL assessment only.
+   *
+   * The COE publishes an examination pattern, not a whole course: every
+   * department sets its own internal tests, assignments and seminars, and
+   * dropping one department's idea of those onto every course in the
+   * college is not what "adopt the external pattern" should mean. It also
+   * keeps adoption within one authority, so an HoD adopting it is never
+   * refused half-way through a mixed pattern.
+   */
+  const assessments = institutionWide
+    ? allAssessments.filter((a) => a.weightGroup === EXTERNAL_WEIGHT_GROUP)
+    : allAssessments;
+  if (assessments.length === 0) {
+    redirect(
+      `${back}?error=${encodeURIComponent(
+        institutionWide
+          ? 'This course has no external assessment to capture. An institution-wide template carries the end-semester paper only.'
+          : 'This course has no assessments to capture',
+      )}`,
+    );
+  }
 
   const pattern = capturePattern(
     cos,
@@ -73,11 +103,17 @@ export async function saveTemplateFromCourseAction(courseId: string, formData: F
     });
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-      redirect(`${back}?error=A+template+with+that+name+already+exists+in+the+department`);
+      redirect(
+        `${back}?error=${encodeURIComponent(
+          institutionWide
+            ? `An institution-wide template called “${name}” already exists.`
+            : `A template called “${name}” already exists in this department.`,
+        )}`,
+      );
     }
     throw err;
   }
-  redirect(`${back}?notice=Template+saved`);
+  redirect(`${back}?notice=${encodeURIComponent(institutionWide ? 'Template saved for all departments' : 'Template saved')}`);
 }
 
 /**
@@ -87,14 +123,15 @@ export async function saveTemplateFromCourseAction(courseId: string, formData: F
  */
 export async function adoptTemplateAction(courseId: string, formData: FormData): Promise<void> {
   const user = await requireSession();
-  await guard.require(user.userId, { type: 'course.write', courseId });
 
   const templateId = String(formData.get('templateId') ?? '');
   const back = `/courses/${courseId}/assessments`;
 
   const departmentId = await departmentOfCourse(courseId);
   const template = await prisma.assessmentTemplate.findUnique({ where: { id: templateId } });
-  if (!template || template.departmentId !== departmentId) {
+  // Either this department's own pattern, or an institution-wide one the
+  // COE published for everybody (CR-3).
+  if (!template || (template.departmentId !== null && template.departmentId !== departmentId)) {
     redirect(`${back}?error=Choose+a+template+of+this+department`);
   }
   if ((await prisma.assessment.count({ where: { courseId } })) > 0) {
@@ -104,6 +141,15 @@ export async function adoptTemplateAction(courseId: string, formData: FormData):
   const cos = await prisma.courseOutcome.findMany({ where: { courseId }, orderBy: { displayOrder: 'asc' }, select: { id: true } });
   const pattern = parsePattern(template.pattern);
   const { plans, warnings } = applyPattern(pattern, cos);
+
+  // CR-3: adoption CREATES assessments, so it needs the same permission
+  // creating each one by hand would. A pattern of internal tests is the
+  // department's to apply; one carrying the end-semester paper is the
+  // examinations office's. Checked per assessment, before anything is
+  // written, so a mixed pattern is refused whole rather than half-applied.
+  for (const plan of plans) {
+    await requireAssessmentWrite(user.userId, courseId, plan.weightGroup);
+  }
 
   await prisma.$transaction(async (tx) => {
     for (const plan of plans) {
@@ -167,10 +213,23 @@ export async function adoptTemplateAction(courseId: string, formData: FormData):
   redirect(`${back}?notice=${notice}`);
 }
 
+/**
+ * CR-3: a template with no department is the institution-wide external
+ * examination pattern, which belongs to the Controller of Examinations.
+ * A departmental one (FR-8) stays with that department's HoD.
+ */
+async function requireTemplateWrite(userId: string, departmentId: string | null): Promise<void> {
+  if (departmentId === null) {
+    await guard.require(userId, { type: 'templates.institution.manage' });
+    return;
+  }
+  await guard.require(userId, { type: 'templates.manage', departmentId });
+}
+
 export async function deleteTemplateAction(templateId: string): Promise<void> {
   const user = await requireSession();
   const template = await prisma.assessmentTemplate.findUniqueOrThrow({ where: { id: templateId } });
-  await guard.require(user.userId, { type: 'templates.manage', departmentId: template.departmentId });
+  await requireTemplateWrite(user.userId, template.departmentId);
 
   await prisma.assessmentTemplate.delete({ where: { id: templateId } });
   await logAudit({

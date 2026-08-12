@@ -53,6 +53,11 @@ export function StructureEditor({ assessmentId, shape, canEdit, cos, weightGroup
   const [message, setMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  // Which owner to name in the read-only notice below. Read from the
+  // assessment as it stands, not from the editable state, because the
+  // notice is shown precisely when nothing here is editable.
+  const isExternal = initial.weightGroup === 'external';
+
   const touch = () => {
     setDirty(true);
     setMessage(null);
@@ -202,7 +207,16 @@ export function StructureEditor({ assessmentId, shape, canEdit, cos, weightGroup
     });
 
   if (!canEdit) {
-    return <p className="text-xs text-gray-500">Read-only: structure is edited by the course faculty (DRAFT) or the HoD.</p>;
+    // CR-3 split this: the end-semester paper of a theory course is the
+    // Controller of Examinations', everything else the course chain's.
+    // Naming the wrong owner sends people to the wrong colleague.
+    return (
+      <p className="text-xs text-gray-500">
+        {isExternal
+          ? 'Read-only: the end-semester examination of a theory course is set by the Controller of Examinations. Marking the course as Laboratory on its Details tab hands its practical examination to the department.'
+          : 'Read-only: structure is edited by the course faculty (while DRAFT) or the HoD.'}
+      </p>
+    );
   }
 
   return (

@@ -1,5 +1,6 @@
-import { addInstructorAction, removeInstructorAction, updateCourseDetailsAction } from '@/actions/course';
+import { addInstructorAction, removeInstructorAction } from '@/actions/course';
 import { AddInstructorForm } from '@/components/AddInstructorForm';
+import { CourseDetailsForm } from '@/components/CourseDetailsForm';
 import { guard } from '@/lib/authz';
 import { prisma } from '@/lib/db';
 import { excludeAssigned } from '@/lib/facultySearch';
@@ -20,11 +21,13 @@ export default async function CourseDetailsPage({
     where: { id: courseId },
     include: { instructors: { include: { user: { select: { id: true, fullName: true, email: true } } } } },
   });
-  const canWrite = (await guard.check(user.userId, { type: 'course.write', courseId })).allow;
+  // CR-3: the catalogue entry — code, title, semester, credits and
+  // whether this is a practical paper — belongs to the Controller of
+  // Examinations. Everyone else reads it.
+  const canWrite = (await guard.check(user.userId, { type: 'course.details.write', courseId })).allow;
   // Staffing is a separate authority (FR-4): the HoD decides who teaches.
   const canStaff = (await guard.check(user.userId, { type: 'course.staff', courseId })).allow;
 
-  const updateAction = updateCourseDetailsAction.bind(null, courseId);
   const addAction = addInstructorAction.bind(null, courseId);
 
   // Only offered when the viewer may actually staff the course: the list
@@ -47,42 +50,23 @@ export default async function CourseDetailsPage({
 
       <section className="space-y-2">
         <h2 className="font-medium">Details</h2>
-        {/*
-          Flex rather than a two-column grid: every field is sized to
-          what it actually holds, and the button sits directly after the
-          last one instead of being pushed to the far side of a column it
-          never needed. The card is only as wide as the longest field.
-        */}
-        <form
-          action={updateAction}
-          className="bg-white border border-gray-300 rounded p-4 flex flex-wrap items-end gap-x-3 gap-y-2 max-w-xl"
-        >
-          <label className="block">
-            <span className="block text-xs font-medium text-gray-700 mb-1">Code</span>
-            <input name="code" defaultValue={course.code} required disabled={!canWrite} className="w-40 border border-gray-300 rounded px-2 py-1.5 disabled:bg-gray-100" />
-          </label>
-          <label className="block">
-            <span className="block text-xs font-medium text-gray-700 mb-1">Semester</span>
-            {/* One or two digits. A wide box invites the reader to expect
-                a long value. */}
-            <input name="semester" type="number" min={1} max={12} defaultValue={course.semester} required disabled={!canWrite} className="w-16 border border-gray-300 rounded px-2 py-1.5 disabled:bg-gray-100" />
-          </label>
-          <label className="block">
-            <span className="block text-xs font-medium text-gray-700 mb-1">Credits</span>
-            {/* Wider than Semester only because it takes halves: "4.5". */}
-            <input name="credits" type="number" step="0.5" min={0} defaultValue={course.credits?.toString() ?? ''} disabled={!canWrite} className="w-20 border border-gray-300 rounded px-2 py-1.5 disabled:bg-gray-100" />
-          </label>
-          {/* `w-full` breaks the line: the title is the one free-text
-              field and gets the row to itself. */}
-          <label className="block w-full">
-            <span className="block text-xs font-medium text-gray-700 mb-1">Title</span>
-            <input name="title" defaultValue={course.title} required disabled={!canWrite} className="w-full border border-gray-300 rounded px-2 py-1.5 disabled:bg-gray-100" />
-          </label>
-          {canWrite ? (
-            <button type="submit" className="bg-blue-700 text-white rounded px-3 py-1.5 hover:bg-blue-800">Save details</button>
-          ) : null}
-        </form>
-        {!canWrite ? <p className="text-xs text-gray-500">Read-only: course setup is edited by its faculty while in DRAFT, or by the HoD.</p> : null}
+        <CourseDetailsForm
+          courseId={courseId}
+          canWrite={canWrite}
+          course={{
+            code: course.code,
+            title: course.title,
+            semester: course.semester,
+            credits: course.credits?.toString() ?? null,
+            isLaboratory: course.isLaboratory,
+          }}
+        />
+        {!canWrite ? (
+          <p className="text-xs text-gray-500">
+            Read-only: the course catalogue — code, title, semester, credits and the Laboratory flag — is kept by the
+            Controller of Examinations (§2, CR-3). Everything else about the course is edited on its own tab.
+          </p>
+        ) : null}
       </section>
 
       <section className="space-y-2">

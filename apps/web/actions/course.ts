@@ -52,26 +52,67 @@ export async function createCourseAction(formData: FormData): Promise<void> {
   redirect(`/courses/${course.id}`);
 }
 
-export async function updateCourseDetailsAction(courseId: string, formData: FormData): Promise<void> {
+/**
+ * CR-3: the course catalogue belongs to the Controller of Examinations —
+ * code, title, semester, credits, and whether this is a practical paper.
+ * `course.details.write`, not `course.write`: the rest of the course
+ * setup stays with the people teaching it.
+ */
+export type CourseDetailsResult = { ok?: true; error?: string };
+
+export async function updateCourseDetailsAction(
+  courseId: string,
+  _prev: CourseDetailsResult | null,
+  formData: FormData,
+): Promise<CourseDetailsResult> {
   const user = await requireSession();
-  await guard.require(user.userId, { type: 'course.write', courseId });
+  await guard.require(user.userId, { type: 'course.details.write', courseId });
 
   const before = await prisma.course.findUniqueOrThrow({
     where: { id: courseId },
-    select: { code: true, title: true, semester: true, credits: true },
+    select: { code: true, title: true, semester: true, credits: true, isLaboratory: true },
   });
 
   const code = String(formData.get('code') ?? '').trim();
   const title = String(formData.get('title') ?? '').trim();
   const semester = Number(formData.get('semester'));
   const creditsRaw = String(formData.get('credits') ?? '').trim();
+  const isLaboratory = formData.get('isLaboratory') === 'on';
+  // Returned, not redirected: a server action that redirects to its own
+  // route leaves the content area blank in a production build, so the
+  // message would never be seen.
   if (!code || !title || !Number.isInteger(semester) || semester < 1) {
-    redirect(`/courses/${courseId}?error=Code,+title+and+semester+are+required`);
+    return { error: 'Code, title and semester are required.' };
+  }
+
+  // Flipping the flag hands the external assessment to a different set of
+  // people. Doing that while marks are already recorded would silently
+  // transfer ownership of somebody's work, so it is refused for as long
+  // as any external mark exists — the same rule that stops a batch being
+  // deleted while a course depends on it.
+  if (isLaboratory !== before.isLaboratory) {
+    const externalMarks = await prisma.markValue.count({
+      where: { courseId, assessment: { weightGroup: 'external' } },
+    });
+    if (externalMarks > 0) {
+      const target = isLaboratory ? 'the department' : 'the Controller of Examinations';
+      return {
+        error: `Cannot change this to ${isLaboratory ? 'a laboratory' : 'a theory'} course: ${externalMarks} external mark${
+          externalMarks === 1 ? '' : 's'
+        } already recorded would pass to ${target}. Clear them first.`,
+      };
+    }
   }
 
   await prisma.course.update({
     where: { id: courseId },
-    data: { code, title, semester, credits: creditsRaw === '' ? null : new Prisma.Decimal(creditsRaw) },
+    data: {
+      code,
+      title,
+      semester,
+      credits: creditsRaw === '' ? null : new Prisma.Decimal(creditsRaw),
+      isLaboratory,
+    },
   });
   await logAudit({
     actorId: user.userId,
@@ -79,9 +120,10 @@ export async function updateCourseDetailsAction(courseId: string, formData: Form
     entityType: 'Course',
     entityId: courseId,
     before,
-    after: { code, title, semester, credits: creditsRaw || null },
+    after: { code, title, semester, credits: creditsRaw || null, isLaboratory },
   });
   revalidatePath(`/courses/${courseId}`);
+  return { ok: true };
 }
 
 /**

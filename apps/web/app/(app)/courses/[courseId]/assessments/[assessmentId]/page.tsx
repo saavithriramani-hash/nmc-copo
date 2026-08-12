@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { StructureEditor } from '@/components/StructureEditor';
-import { guard } from '@/lib/authz';
+import { canWriteAssessment } from '@/lib/authz';
 import { prisma } from '@/lib/db';
 import { resolveCourseParameters } from '@/lib/params';
 import { requireSession } from '@/lib/session';
@@ -28,10 +28,22 @@ export default async function AssessmentEditorPage({
   });
   if (!assessment || assessment.courseId !== courseId) notFound();
 
+  // CR-3: who may edit a structure depends on the group it sits in, not
+  // on the course alone. The end-semester paper of a theory course is the
+  // Controller of Examinations'; everything else, and the whole of a
+  // practical course, is the course chain's.
   const [canEdit, { parameters }] = await Promise.all([
-    guard.check(user.userId, { type: 'course.write', courseId }).then((d) => d.allow),
+    canWriteAssessment(user.userId, courseId, assessment.weightGroup),
     resolveCourseParameters(courseId),
   ]);
+
+  // The editor can move an assessment between groups, so offer only the
+  // groups this person could move it INTO — the action refuses the rest,
+  // and a dropdown that leads to a refusal is a trap.
+  const writableGroups: string[] = [];
+  for (const group of Object.keys(parameters.weightGroups)) {
+    if (await canWriteAssessment(user.userId, courseId, group)) writableGroups.push(group);
+  }
   const cos = await prisma.courseOutcome.findMany({
     where: { courseId },
     orderBy: { displayOrder: 'asc' },
@@ -52,7 +64,7 @@ export default async function AssessmentEditorPage({
         shape={assessment.shape}
         canEdit={canEdit}
         cos={cos}
-        weightGroups={Object.keys(parameters.weightGroups)}
+        weightGroups={writableGroups}
         thresholdFraction={parameters.thresholdFraction}
         initial={{
           name: assessment.name,

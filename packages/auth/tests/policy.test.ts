@@ -4,6 +4,7 @@ import type { Action } from '../src/index';
 import {
   C_MATH_1,
   C_MATH_2,
+  C_MATH_LAB,
   C_PHYS_1,
   DEPT_MATH,
   DEPT_PHYS,
@@ -12,6 +13,7 @@ import {
   PROG_PHYS,
   actor,
   admin,
+  coe,
   course,
   dean,
   facultyMath1,
@@ -281,66 +283,58 @@ describe('policy — system administrator: accounts and infrastructure, never ac
   });
 });
 
-describe('policy — course creation and assessment templates (department chain)', () => {
-  it('the HoD creates courses, manages templates and imports rosters in their department only', () => {
-    for (const type of ['course.create', 'templates.manage', 'roster.manage'] as const) {
-      expect(decide(hodMath, { type, departmentId: 'dept-math' }, DEPT_MATH).allow, type).toBe(true);
-      expect(decide(hodMath, { type, departmentId: 'dept-physics' }, DEPT_PHYS).allow, type).toBe(false);
+describe('policy — the catalogue and the register moved to the COE (CR-3)', () => {
+  it('the COE creates courses, batches and rosters in EVERY department', () => {
+    // Institution-wide, like the Dean: one examinations office serves the
+    // whole college, so there is no department it cannot reach.
+    for (const type of ['course.create', 'batches.manage', 'roster.manage'] as const) {
+      for (const dept of [DEPT_MATH, DEPT_PHYS]) {
+        expect(decide(coe, { type, departmentId: dept.departmentId }, dept), `${type}/${dept.departmentId}`).toEqual({
+          allow: true,
+          via: 'COE',
+        });
+      }
     }
   });
 
-  it('faculty, Dean, IQAC, admin and Principal do not create courses, manage templates or import rosters', () => {
-    for (const who of [facultyMath1, dean, iqac, admin, principal]) {
-      for (const type of ['course.create', 'templates.manage', 'roster.manage'] as const) {
+  it('the HoD no longer does — CR-3 supersedes CR-2 on batches', () => {
+    // CR-2 had given the HoD batches because they owned the roster going
+    // into one. Both moved together, so the reasoning survives; it now
+    // points at the COE.
+    for (const type of ['course.create', 'batches.manage', 'roster.manage'] as const) {
+      expect(decide(hodMath, { type, departmentId: 'dept-math' }, DEPT_MATH).allow, type).toBe(false);
+    }
+  });
+
+  it('nor does the administrator, who kept batches under CR-2', () => {
+    expect(decide(admin, { type: 'batches.manage', departmentId: 'dept-math' }, DEPT_MATH).allow).toBe(false);
+  });
+
+  it('nobody else either — not the Dean, the IQAC, the Principal or faculty', () => {
+    for (const who of [facultyMath1, dean, iqac, principal]) {
+      for (const type of ['course.create', 'batches.manage', 'roster.manage'] as const) {
         expect(decide(who, { type, departmentId: 'dept-math' }, DEPT_MATH).allow, `${who.userId}/${type}`).toBe(false);
       }
     }
   });
-});
 
-// One action covers create, rename and delete: the screens differ, the
-// authority does not. Anything that may add a cohort may correct the year
-// it typed into it.
-describe('policy — batches: the HoD and the administrator, together (CR-2)', () => {
-  it('the HoD creates batches in their own department', () => {
-    expect(decide(hodMath, { type: 'batches.manage', departmentId: 'dept-math' }, DEPT_MATH)).toEqual({
+  it('assessment templates stay with the HoD, and the COE joins them', () => {
+    // FR-8 department patterns are still the HoD's; the COE publishes the
+    // institution-wide external examination pattern through the same action.
+    expect(decide(hodMath, { type: 'templates.manage', departmentId: 'dept-math' }, DEPT_MATH).allow).toBe(true);
+    expect(decide(hodMath, { type: 'templates.manage', departmentId: 'dept-physics' }, DEPT_PHYS).allow).toBe(false);
+    expect(decide(coe, { type: 'templates.manage', departmentId: 'dept-physics' }, DEPT_PHYS)).toEqual({
       allow: true,
-      via: 'HOD',
+      via: 'COE',
     });
   });
 
-  it('…and in no other department, headship being the only scoped role', () => {
-    expect(decide(hodMath, { type: 'batches.manage', departmentId: 'dept-physics' }, DEPT_PHYS)).toEqual({
-      allow: false,
-      reason: 'OUT_OF_SCOPE',
-    });
-  });
-
-  it('the administrator keeps it, in every department', () => {
-    // CR-2 ADDS a holder; it does not move the capability. Rollover
-    // creates batches, and a department between HoDs must not be stranded.
-    for (const dept of [DEPT_MATH, DEPT_PHYS]) {
-      expect(decide(admin, { type: 'batches.manage', departmentId: dept.departmentId }, dept)).toEqual({
-        allow: true,
-        via: 'ADMIN',
-      });
-    }
-  });
-
-  it('nobody else creates a batch — not the Dean, the IQAC, the Principal or faculty', () => {
-    for (const who of [facultyMath1, dean, iqac, principal]) {
-      expect(decide(who, { type: 'batches.manage', departmentId: 'dept-math' }, DEPT_MATH).allow, who.userId).toBe(
-        false,
-      );
-    }
-  });
-
-  it('creating a batch is not creating a department: the HoD gains nothing institution-wide', () => {
-    // The whole point of the separate action. Had CR-2 been implemented by
-    // handing the HoD `departments.manage`, this would pass silently and
-    // they could create departments and programmes across the college.
-    for (const type of ['departments.manage', 'users.manage', 'rollover.execute', 'backups.manage'] as const) {
-      expect(decide(hodMath, { type }, null).allow, type).toBe(false);
+  it('the COE gains nothing institution-wide beyond its own remit', () => {
+    // The point of separate actions. Had CR-3 been implemented by handing
+    // the COE `departments.manage`, this would pass silently and the
+    // examinations office could reorganise the college.
+    for (const type of ['departments.manage', 'users.manage', 'rollover.execute', 'backups.manage', 'settings.institution.write', 'institution.read', 'audit.read'] as const) {
+      expect(decide(coe, { type }, null).allow, type).toBe(false);
     }
   });
 
@@ -363,6 +357,97 @@ describe('policy — batches: the HoD and the administrator, together (CR-2)', (
       allow: false,
       reason: 'ACCOUNT_INACTIVE',
     });
+  });
+});
+
+describe('policy — the external examination (CR-3)', () => {
+  const theory = (type: 'assessment.external.write' | 'marks.external.write', who: typeof coe) =>
+    decide(who, { type, courseId: 'c-math-1' }, C_MATH_1);
+  const lab = (type: 'assessment.external.write' | 'marks.external.write', who: typeof coe) =>
+    decide(who, { type, courseId: 'c-math-lab' }, C_MATH_LAB);
+
+  it('on a THEORY paper the COE sets the paper and enters its marks', () => {
+    for (const type of ['assessment.external.write', 'marks.external.write'] as const) {
+      expect(theory(type, coe), type).toEqual({ allow: true, via: 'COE' });
+    }
+  });
+
+  it('…and the department does not, however senior', () => {
+    for (const type of ['assessment.external.write', 'marks.external.write'] as const) {
+      expect(theory(type, hodMath).allow, `hod/${type}`).toBe(false);
+      expect(theory(type, facultyMath1).allow, `faculty/${type}`).toBe(false);
+    }
+  });
+
+  it('on a LABORATORY paper it is the other way round — the department conducts it', () => {
+    for (const type of ['assessment.external.write', 'marks.external.write'] as const) {
+      expect(lab(type, hodMath), `hod/${type}`).toEqual({ allow: true, via: 'HOD(laboratory course)' });
+      expect(lab(type, facultyMath1), `faculty/${type}`).toEqual({
+        allow: true,
+        via: 'FACULTY(own laboratory course)',
+      });
+      expect(lab(type, coe).allow, `coe/${type}`).toBe(false);
+    }
+  });
+
+  it('THE ONE THAT MATTERS: the COE cannot touch internal or continuous marks', () => {
+    // The whole reason marks.write was split. If this ever passes, the
+    // examinations office can rewrite a colleague's class tests — and the
+    // simplest way to break it is to "tidy up" by using marks.write here.
+    expect(decide(coe, { type: 'marks.write', courseId: 'c-math-1' }, C_MATH_1).allow).toBe(false);
+    expect(decide(coe, { type: 'course.write', courseId: 'c-math-1' }, C_MATH_1).allow).toBe(false);
+    expect(decide(coe, { type: 'matrix.write', courseId: 'c-math-1' }, C_MATH_1).allow).toBe(false);
+  });
+
+  it('the COE reads a course and its marks, because it cannot mark blind', () => {
+    // NFR-10 as amended: the reach is bounded at the screens, which serve
+    // one assessment at a time behind marks.external.write.
+    expect(decide(coe, { type: 'course.read', courseId: 'c-math-1' }, C_MATH_1).allow).toBe(true);
+    expect(decide(coe, { type: 'marks.read', courseId: 'c-math-1' }, C_MATH_1).allow).toBe(true);
+  });
+
+  it('a LOCKED course is closed to the COE — only the HoD unlocks', () => {
+    const locked = course({ status: 'LOCKED' });
+    for (const type of ['assessment.external.write', 'marks.external.write', 'course.details.write'] as const) {
+      expect(decide(coe, { type, courseId: 'c-math-1' }, locked), type).toEqual({
+        allow: false,
+        reason: 'COURSE_LOCKED',
+      });
+    }
+    for (const type of ['course.unlock', 'course.lock', 'course.submit'] as const) {
+      expect(decide(coe, { type, courseId: 'c-math-1' }, locked).allow, type).toBe(false);
+    }
+  });
+
+  it('a SUBMITTED theory course is still the COE’s — results arrive after teaching ends', () => {
+    // Submission freezes the FACULTY out while the HoD reviews. It must
+    // not freeze out the examinations office, whose marks typically
+    // arrive at exactly this point.
+    const submitted = course({ status: 'SUBMITTED' });
+    expect(decide(coe, { type: 'marks.external.write', courseId: 'c-math-1' }, submitted).allow).toBe(true);
+    expect(decide(facultyMath1, { type: 'marks.write', courseId: 'c-math-1' }, submitted).allow).toBe(false);
+  });
+});
+
+describe('policy — course details are the catalogue (CR-3)', () => {
+  it('only the COE writes code, title, semester and credits', () => {
+    expect(decide(coe, { type: 'course.details.write', courseId: 'c-math-1' }, C_MATH_1)).toEqual({
+      allow: true,
+      via: 'COE',
+    });
+    for (const who of [facultyMath1, hodMath, dean, iqac, principal, admin]) {
+      expect(decide(who, { type: 'course.details.write', courseId: 'c-math-1' }, C_MATH_1).allow, who.userId).toBe(
+        false,
+      );
+    }
+  });
+
+  it('but the course chain still edits everything else about the course', () => {
+    // Splitting the details out must not have taken the setup with it.
+    for (const type of ['course.write', 'matrix.write', 'marks.write'] as const) {
+      expect(decide(facultyMath1, { type, courseId: 'c-math-1' }, C_MATH_1).allow, type).toBe(true);
+      expect(decide(hodMath, { type, courseId: 'c-math-1' }, C_MATH_1).allow, type).toBe(true);
+    }
   });
 });
 

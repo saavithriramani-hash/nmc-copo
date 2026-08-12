@@ -11,12 +11,13 @@ import type { RoleKindValue } from '@copo/auth';
  * administrator could lock the institution out of its own system.
  */
 
-export const ROLE_KINDS: readonly RoleKindValue[] = ['FACULTY', 'HOD', 'DEAN', 'IQAC', 'PRINCIPAL', 'ADMIN'] as const;
+export const ROLE_KINDS: readonly RoleKindValue[] = ['FACULTY', 'HOD', 'COE', 'DEAN', 'IQAC', 'PRINCIPAL', 'ADMIN'] as const;
 
 /** The §2 role table, in the college's own words. */
 export const ROLE_LABELS: Record<RoleKindValue, string> = {
   FACULTY: 'Faculty',
   HOD: 'Head of Department',
+  COE: 'Controller of Examinations',
   DEAN: 'Dean',
   IQAC: 'IQAC / Accreditation cell',
   PRINCIPAL: 'Principal',
@@ -25,7 +26,8 @@ export const ROLE_LABELS: Record<RoleKindValue, string> = {
 
 export const ROLE_CAPABILITIES: Record<RoleKindValue, string> = {
   FACULTY: 'Own courses: setup, mark entry, compute, export, submit for approval.',
-  HOD: 'Own department, all its programmes: all faculty capability department-wide; PO/PSO definitions and articulation matrices; approve and lock courses.',
+  HOD: 'Own department, all its programmes: all faculty capability department-wide; PO/PSO definitions and articulation matrices; approve and lock courses; the external examination of LABORATORY courses.',
+  COE: 'Institution: the course catalogue (creating courses, their code, title, semester, credits and the Laboratory flag), batches, student rosters, and the external examination of theory courses — its structure and its marks. No access to internal or continuous marks.',
   DEAN: 'Institution: read-all, consolidation, accreditation bundles, and the attainment parameters (bands and weights).',
   IQAC: 'Institution, READ-ONLY: read-all, consolidation, accreditation bundles, audit log. Sets nothing.',
   PRINCIPAL: 'Institution: read-only dashboards.',
@@ -44,6 +46,7 @@ export const ROLE_CAPABILITIES: Record<RoleKindValue, string> = {
 export const ROLE_SHORT_LABELS: Record<RoleKindValue, string> = {
   FACULTY: 'Faculty',
   HOD: 'HoD',
+  COE: 'COE',
   DEAN: 'Dean',
   IQAC: 'IQAC',
   PRINCIPAL: 'Principal',

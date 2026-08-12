@@ -2,7 +2,7 @@ import type { PrismaClient } from '@copo/db';
 
 /** A role assignment effective at the instant under consideration. */
 export interface EffectiveRole {
-  kind: 'ADMIN' | 'PRINCIPAL' | 'DEAN' | 'IQAC' | 'HOD' | 'FACULTY';
+  kind: 'ADMIN' | 'PRINCIPAL' | 'DEAN' | 'IQAC' | 'COE' | 'HOD' | 'FACULTY';
   /** HOD only; every other role is institution-wide and leaves this null. */
   departmentId: string | null;
 }
@@ -22,6 +22,13 @@ export interface CourseResource {
   status: 'DRAFT' | 'SUBMITTED' | 'LOCKED';
   /** Users assigned to the course (CourseInstructor). */
   instructorIds: readonly string[];
+  /**
+   * CR-3: a practical paper. Decides who owns the EXTERNAL assessment —
+   * the COE for a theory paper, the department for a practical, whose
+   * external examination the department conducts itself. Affects no
+   * arithmetic.
+   */
+  isLaboratory: boolean;
 }
 
 export interface ProgrammeResource {
@@ -81,6 +88,7 @@ export class PrismaContextSource implements ContextSource {
       select: {
         id: true,
         status: true,
+        isLaboratory: true,
         batch: { select: { programmeId: true, programme: { select: { departmentId: true } } } },
         instructors: { select: { userId: true } },
       },
@@ -93,6 +101,7 @@ export class PrismaContextSource implements ContextSource {
       departmentId: course.batch.programme.departmentId,
       status: course.status,
       instructorIds: course.instructors.map((i) => i.userId),
+      isLaboratory: course.isLaboratory,
     };
   }
 

@@ -3,7 +3,7 @@ import type { AuditSink } from './audit';
 import type { Guard } from './authz/guard';
 import { roleEffectiveAt, type EffectiveRole } from './authz/context';
 
-export type RoleKindValue = 'ADMIN' | 'PRINCIPAL' | 'DEAN' | 'IQAC' | 'HOD' | 'FACULTY';
+export type RoleKindValue = 'ADMIN' | 'PRINCIPAL' | 'DEAN' | 'IQAC' | 'COE' | 'HOD' | 'FACULTY';
 
 /**
  * Role assignments carry effect dates (§2): staff change hands between

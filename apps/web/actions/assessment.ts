@@ -2,16 +2,19 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import { AuthzDeniedError } from '@copo/auth';
 import { Prisma } from '@copo/db';
 import { prisma } from '@/lib/db';
-import { guard } from '@/lib/authz';
+import { guard, requireAssessmentWrite } from '@/lib/authz';
 import { logAudit } from '@/lib/audit';
 import { resolveCourseParameters } from '@/lib/params';
 import { requireSession } from '@/lib/session';
 
 export async function createAssessmentAction(courseId: string, formData: FormData): Promise<void> {
   const user = await requireSession();
-  await guard.require(user.userId, { type: 'course.write', courseId });
+  // Authorised BELOW, once the weight group is known: CR-3 makes the
+  // external examination the COE's on a theory paper and the
+  // department's on a practical one.
 
   const name = String(formData.get('name') ?? '').trim();
   const shape = String(formData.get('shape') ?? '') as 'SECTIONED' | 'ITEM_LIST' | 'SINGLE_SCORE';
@@ -27,6 +30,23 @@ export async function createAssessmentAction(courseId: string, formData: FormDat
   }
   const { parameters } = await resolveCourseParameters(courseId);
   if (!(weightGroup in parameters.weightGroups)) redirect(`${back}?error=Choose+a+weight+group`);
+  // A denial here is a normal outcome, not a fault: the form no longer
+  // offers a group the caller cannot write, so reaching this means a
+  // stale page or a hand-made request. Either way it deserves a sentence
+  // rather than the blank error page an uncaught AuthzDeniedError gives.
+  // The guard still records the denial before it is caught.
+  try {
+    await requireAssessmentWrite(user.userId, courseId, weightGroup);
+  } catch (err) {
+    if (err instanceof AuthzDeniedError) {
+      redirect(
+        `${back}?error=${encodeURIComponent(
+          `The “${weightGroup}” group is not yours to add to. On a theory course the end-semester examination is set by the Controller of Examinations; marking the course as Laboratory hands its practical examination to the department.`,
+        )}`,
+      );
+    }
+    throw err;
+  }
   const maxMark = Number(maxMarkRaw);
   if (shape === 'SINGLE_SCORE' && (!Number.isFinite(maxMark) || maxMark <= 0)) {
     redirect(`${back}?error=A+single-score+assessment+needs+its+maximum+mark`);
@@ -61,13 +81,24 @@ export async function createAssessmentAction(courseId: string, formData: FormDat
 
 export async function deleteAssessmentAction(courseId: string, assessmentId: string): Promise<void> {
   const user = await requireSession();
-  await guard.require(user.userId, { type: 'course.write', courseId });
 
   const before = await prisma.assessment.findUniqueOrThrow({
     where: { id: assessmentId },
     include: { _count: { select: { items: true, sections: true } } },
   });
   if (before.courseId !== courseId) redirect(`/courses/${courseId}/assessments?error=Assessment+mismatch`);
+  try {
+    await requireAssessmentWrite(user.userId, courseId, before.weightGroup);
+  } catch (err) {
+    if (err instanceof AuthzDeniedError) {
+      redirect(
+        `/courses/${courseId}/assessments?error=${encodeURIComponent(
+          'That assessment is not yours to delete. On a theory course the end-semester examination belongs to the Controller of Examinations.',
+        )}`,
+      );
+    }
+    throw err;
+  }
 
   try {
     await prisma.$transaction([
@@ -130,7 +161,22 @@ export async function saveAssessmentStructureAction(
   });
   if (!assessment) return { error: 'Assessment not found.' };
   const courseId = assessment.courseId;
-  await guard.require(user.userId, { type: 'course.write', courseId });
+  // Both the group it is in NOW and the group it is being moved to: an
+  // editor may neither take an external paper out of the COE's hands nor
+  // push one of their own into them. This action returns its errors, so a
+  // denial is returned too rather than thrown at a blank page.
+  try {
+    await requireAssessmentWrite(user.userId, courseId, assessment.weightGroup);
+    await requireAssessmentWrite(user.userId, courseId, payload.weightGroup);
+  } catch (err) {
+    if (err instanceof AuthzDeniedError) {
+      return {
+        error:
+          'This assessment is not yours to edit. On a theory course the end-semester examination belongs to the Controller of Examinations.',
+      };
+    }
+    throw err;
+  }
 
   // ── validation ──
   if (!payload.name.trim()) return { error: 'The assessment needs a name.' };

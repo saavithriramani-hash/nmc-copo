@@ -132,6 +132,7 @@ async function main(): Promise<void> {
       { id: 'user-fac-1', email: 'faculty1@nmc.dev', fullName: 'Course Faculty', passwordHash: devHash, mustChangePassword: false },
       { id: 'user-dean', email: 'dean@nmc.dev', fullName: 'Dean', passwordHash: devHash, mustChangePassword: false },
       { id: 'user-iqac', email: 'iqac@nmc.dev', fullName: 'IQAC Coordinator', passwordHash: devHash, mustChangePassword: false },
+      { id: 'user-coe', email: 'coe@nmc.dev', fullName: 'Controller of Examinations', passwordHash: devHash, mustChangePassword: false },
       { id: 'user-fac-2', email: 'faculty2@nmc.dev', fullName: 'Second Faculty', passwordHash: devHash, mustChangePassword: false },
     ],
   });
@@ -146,6 +147,9 @@ async function main(): Promise<void> {
       { id: 'role-fac', userId: 'user-fac-1', kind: 'FACULTY', effectiveFrom },
       { id: 'role-dean', userId: 'user-dean', kind: 'DEAN', effectiveFrom },
       { id: 'role-iqac', userId: 'user-iqac', kind: 'IQAC', effectiveFrom },
+      // CR-3: institution-wide, like the Dean — the examinations office
+      // serves the whole college.
+      { id: 'role-coe', userId: 'user-coe', kind: 'COE', effectiveFrom },
       { id: 'role-fac-2', userId: 'user-fac-2', kind: 'FACULTY', effectiveFrom },
     ],
   });
@@ -355,7 +359,7 @@ async function main(): Promise<void> {
   };
   console.log('Seed complete:', counts);
   console.log('Course id: course-mat301 — try `npm run smoke` to run the adapter + engine against it.');
-  console.log(`DEV logins (password "${DEV_PASSWORD}", local only): admin@nmc.dev, hod.math@nmc.dev, faculty1@nmc.dev, faculty2@nmc.dev, dean@nmc.dev, iqac@nmc.dev`);
+  console.log(`DEV logins (password "${DEV_PASSWORD}", local only): admin@nmc.dev, hod.math@nmc.dev, faculty1@nmc.dev, faculty2@nmc.dev, dean@nmc.dev, iqac@nmc.dev, coe@nmc.dev`);
 }
 
 main()

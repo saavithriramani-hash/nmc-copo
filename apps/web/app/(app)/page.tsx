@@ -11,15 +11,22 @@ import { requireSession } from '@/lib/session';
 export default async function HomePage() {
   const user = await requireSession();
 
+  // CR-3: the Controller of Examinations owns the catalogue and the
+  // end-semester examination of every theory course, so they see all of
+  // them — the one role whose scope is the whole college here.
+  const isCoe = user.roles.some((role) => role.kind === 'COE');
+
   const courses = await prisma.course.findMany({
-    where: {
-      OR: [
-        { instructors: { some: { userId: user.userId } } },
-        ...(user.hodDepartmentIds.length > 0
-          ? [{ batch: { programme: { departmentId: { in: user.hodDepartmentIds } } } }]
-          : []),
-      ],
-    },
+    where: isCoe
+      ? undefined
+      : {
+          OR: [
+            { instructors: { some: { userId: user.userId } } },
+            ...(user.hodDepartmentIds.length > 0
+              ? [{ batch: { programme: { departmentId: { in: user.hodDepartmentIds } } } }]
+              : []),
+          ],
+        },
     include: {
       batch: { include: { programme: { include: { department: true } } } },
       instructors: { include: { user: { select: { fullName: true } } } },
@@ -29,7 +36,7 @@ export default async function HomePage() {
     orderBy: [{ code: 'asc' }],
   });
 
-  const canCreate = user.hodDepartmentIds.length > 0;
+  const canCreate = isCoe;
 
   return (
     <div className="space-y-4">
@@ -45,7 +52,9 @@ export default async function HomePage() {
       {courses.length === 0 ? (
         <p className="text-gray-600">
           No courses yet.{' '}
-          {canCreate ? 'Create the first course of your department.' : 'Courses appear here once your HoD assigns you.'}
+          {canCreate
+            ? 'Create the first one.'
+            : 'Courses appear here once the Controller of Examinations creates one and your HoD assigns you to it.'}
         </p>
       ) : (
         <table className="w-full bg-white border-collapse">

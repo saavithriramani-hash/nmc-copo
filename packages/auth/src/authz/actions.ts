@@ -10,10 +10,18 @@
 export type CourseActionType =
   | 'course.read' // setup + computed results + exports
   | 'course.write' // course setup: COs, assessments, indirect feedback
+  | 'course.details.write' // CR-3: code, title, semester, credits, Laboratory flag — the COE alone
   | 'course.staff' // who teaches the course (FR-4 staffing — HoD, never the faculty themselves)
   | 'matrix.write' // CO↔PO articulation matrix (§2: coordinator capability too)
   | 'marks.read' // per-student raw marks (NFR-10: faculty + department chain only)
   | 'marks.write' // mark entry / import
+  // ── CR-3: the external examination ────────────────────────────────────
+  // Split from course.write and marks.write because the Controller of
+  // Examinations owns the end-semester paper and nothing else on the
+  // course. On a LABORATORY course the department conducts its own
+  // practical examination, so both fall back to the course's own chain.
+  | 'assessment.external.write' // create/edit an assessment in the external weight group
+  | 'marks.external.write' // enter marks for one
   | 'course.submit' // faculty → HoD (FR-16)
   | 'course.lock' // HoD approves and locks → immutable snapshot
   | 'course.unlock' // HoD; creates a new version, never rewrites
@@ -37,6 +45,7 @@ export type DepartmentActionType =
 export type InstitutionActionType =
   | 'institution.read' // consolidations, dashboards, accreditation bundles
   | 'settings.institution.write' // global attainment defaults (IQAC)
+  | 'templates.institution.manage' // CR-3: institution-wide external exam patterns (COE)
   | 'users.manage' // accounts + role assignments (admin)
   | 'departments.manage' // institution, departments, programmes, rollover structures (batches are `batches.manage`)
   | 'rollover.execute' // academic-year rollover
@@ -52,6 +61,9 @@ export type Action =
 export const COURSE_ACTION_TYPES: readonly CourseActionType[] = [
   'course.read',
   'course.write',
+  'course.details.write',
+  'assessment.external.write',
+  'marks.external.write',
   'course.staff',
   'matrix.write',
   'marks.read',

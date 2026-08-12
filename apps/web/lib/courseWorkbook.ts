@@ -104,6 +104,13 @@ export interface CourseImportPlan {
   unmatchedSheets: string[];
   /** Assessments with no sheet in the file — normal when trimming a workbook. */
   assessmentsWithoutSheet: string[];
+  /**
+   * CR-3: assessments this person may not enter — the end-semester paper
+   * of a theory course for the department, or anything else for the
+   * Controller of Examinations. Named rather than silently dropped, so
+   * the preview does not look like the workbook was misread.
+   */
+  notPermitted?: string[];
   totals: {
     changes: number;
     unchanged: number;

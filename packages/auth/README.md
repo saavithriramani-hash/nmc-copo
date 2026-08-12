@@ -51,7 +51,8 @@ Depends on `@copo/db`; nothing else depends on how identity works.
 | Role | Scope enforced |
 |---|---|
 | Faculty | Own courses only (instructor rows); edits only while DRAFT. **Not who teaches the course** |
-| HoD | Every course in their department **and every programme of it**: PO/PSOs, articulation matrices, programme *and* course parameter overrides; lock/unlock; **staffing (`course.staff`)** |
+| HoD | Every course in their department **and every programme of it**: PO/PSOs, articulation matrices, programme *and* course parameter overrides; lock/unlock; **staffing (`course.staff`)**; the external examination of **Laboratory** courses |
+| Controller of Examinations | Institution: the catalogue (creating courses, their code/title/semester/credits and the Laboratory flag), batches, rosters, and the **external examination of theory courses**. **No internal or continuous marks**, and nothing on a locked course |
 | Dean | Read-all (courses, programmes, departments, institution) + **the institution attainment parameters** + audit log. No raw marks |
 | IQAC | **Read-only**: the same read surface as the Dean, minus `settings.institution.write`. No raw marks |
 | Principal | Read-only consolidations/dashboards. No course detail, no marks |
@@ -76,18 +77,30 @@ changing any of them is now a change request against this baseline.
 2. **Principal** gets consolidation reads only ("read-only dashboards"),
    not per-course drill-down.
 3. **Admin holds no academic data access** (separation of duties; §2
-   lists only accounts/departments/rollover/backups). `batches.manage`
-   (CR-2) is the one action the admin **shares** with a scoped role: a
-   batch is an empty container, not academic data, and both the HoD who
-   fills it and the rollover the admin runs need to make one. It covers
-   renaming and deleting a batch as well as creating it — and deletion is
-   still refused outright while any course or roster references it, so
-   sharing the action shares no power over student data.
-4. **Submitted courses freeze faculty edits** while the HoD reviews;
+   lists only accounts/departments/rollover/backups).
+4. **CR-3 — the Controller of Examinations.** Institution-wide. It owns
+   the catalogue (`course.create`, `course.details.write`), the register
+   (`batches.manage`, `roster.manage`) and the external examination
+   (`assessment.external.write`, `marks.external.write`). Three things
+   are worth knowing:
+   - **Both mark actions are split by weight group, not by role.** The
+     caller loads the assessment, sees which group it is in, and asks for
+     the matching permission. `marks.write` therefore still means "the
+     course chain", and a COE holding it would be a bug — there is a test
+     named for exactly that.
+   - **`Course.isLaboratory` flips the external one.** A practical paper
+     is examined by the department, so on those courses the HoD and the
+     faculty hold the external assessment and the COE does not. The flag
+     changes no arithmetic.
+   - **This supersedes CR-2 on batches**, which had given them to the
+     HoD because they owned the roster. Batches and rosters moved
+     together, so the reasoning survives; it points at the examinations
+     office now.
+5. **Submitted courses freeze faculty edits** while the HoD reviews;
    LOCKED freezes everyone (unlock creates a new version).
-5. **Parameter overrides**: institution → the Dean; programme *and*
+6. **Parameter overrides**: institution → the Dean; programme *and*
    course (minuted exception) → the HoD of that department.
-6. **Staffing is departmental, not the course's own** (`course.staff`,
+7. **Staffing is departmental, not the course's own** (`course.staff`,
    HoD only). FR-4 makes assigned faculty part of *creating* a course and
    `course.create` is HoD-only; §2 gives Faculty setup, mark entry,
    compute, export and submit — not staffing. This was originally folded
@@ -96,7 +109,7 @@ changing any of them is now a change request against this baseline.
    (defeating NFR-10), remove a colleague the HoD had posted, or strand
    the course by removing themselves.
 
-## Tests (88, no database needed)
+## Tests (96, no database needed)
 
 `npm test` — the policy matrix role-by-role; guard proofs that a faculty
 account cannot reach another department's marks by **any** catalogued

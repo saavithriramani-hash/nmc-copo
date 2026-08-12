@@ -56,6 +56,9 @@ export function decide(actor: ActorContext, action: Action, resource: ResourceCo
     // ── course-scoped ────────────────────────────────────────────────
     case 'course.read':
     case 'course.write':
+    case 'course.details.write':
+    case 'assessment.external.write':
+    case 'marks.external.write':
     case 'course.staff':
     case 'matrix.write':
     case 'marks.read':
@@ -96,29 +99,33 @@ export function decide(actor: ActorContext, action: Action, resource: ResourceCo
       if (has(actor, 'PRINCIPAL')) return allow('PRINCIPAL');
       return deny('OUT_OF_SCOPE');
     }
-    case 'course.create':
-    case 'templates.manage':
-    case 'roster.manage': {
-      // Courses are created, assessment templates defined, and batch
-      // rosters imported by the department chain (§2 HoD: all faculty
-      // capability department-wide; FR-8/FR-10).
+    case 'templates.manage': {
+      // Department assessment templates (FR-8): a pattern the HoD
+      // captured from one of their own courses. The COE publishes
+      // institution-wide templates for the external examination, which
+      // is the same action with no department attached.
       if (resource?.kind !== 'department') return deny('RESOURCE_NOT_FOUND');
       if (isHodOf(actor, resource.departmentId)) return allow('HOD');
+      if (has(actor, 'COE')) return allow('COE');
       return deny('OUT_OF_SCOPE');
     }
-    case 'batches.manage': {
-      // CR-2: a batch is an incoming cohort of one programme, so it is
-      // department-scoped even though it is structure. The HoD knows when
-      // a cohort arrives and already owns its roster (FR-10), and had to
-      // ask the administrator for the container first.
+    case 'course.create':
+    case 'batches.manage':
+    case 'roster.manage': {
+      // CR-3: the examinations office owns the catalogue and the
+      // register. Creating a course, the batches a cohort arrives in,
+      // and the roster of students in them are all theirs, across every
+      // department.
       //
-      // Unlike the three actions above, the administrator KEEPS this:
-      // batches were theirs alone before CR-2, they create them during
-      // rollover, and a department between HoDs must not be stranded.
+      // This SUPERSEDES CR-2, which had given batches to the HoD on the
+      // reasoning that they owned the roster going into one. Both have
+      // now moved together, so that reasoning still holds — it just
+      // points at the COE instead.
+      //
+      // The HoD keeps everything about running a course: staffing it,
+      // its outcomes, its internal marks, approval and locking.
       if (resource?.kind !== 'department') return deny('RESOURCE_NOT_FOUND');
-      if (isHodOf(actor, resource.departmentId)) return allow('HOD');
-      if (has(actor, 'ADMIN')) return allow('ADMIN');
-      return deny('OUT_OF_SCOPE');
+      return has(actor, 'COE') ? allow('COE') : deny('NOT_PERMITTED');
     }
 
     // ── institution-wide ─────────────────────────────────────────────
@@ -133,6 +140,13 @@ export function decide(actor: ActorContext, action: Action, resource: ResourceCo
       // not already locked into a snapshot, across every department;
       // IQAC reports on them but does not set them.
       return has(actor, 'DEAN') ? allow('DEAN') : deny('NOT_PERMITTED');
+    }
+    case 'templates.institution.manage': {
+      // CR-3: an assessment template with no department is the external
+      // examination pattern the whole college adopts, so it is the
+      // examinations office's alone. Department templates (FR-8) stay
+      // with the HoD under `templates.manage`, which carries a scope.
+      return has(actor, 'COE') ? allow('COE') : deny('NOT_PERMITTED');
     }
     case 'users.manage':
     case 'departments.manage':
@@ -164,15 +178,52 @@ function decideCourse(
       if (hod) return allow('HOD');
       if (has(actor, 'DEAN')) return allow('DEAN'); // §2 read-all
       if (has(actor, 'IQAC')) return allow('IQAC'); // §2 read-all
+      // CR-3: the COE owns the catalogue and the external examination, so
+      // they must be able to find and open any course in the college.
+      if (has(actor, 'COE')) return allow('COE');
       return deny('OUT_OF_SCOPE');
     }
 
     case 'marks.read': {
-      // NFR-10: per-student marks are visible only to the course faculty
-      // and their department chain. Not IQAC, not Principal, not admin.
+      // NFR-10 as amended by CR-3: per-student marks are visible to the
+      // course faculty and their department chain — and to the COE, who
+      // enters the end-semester marks and cannot do so blind. Still not
+      // IQAC, not the Principal, not the administrator.
+      //
+      // The COE's reach is bounded at the point of use rather than here:
+      // the mark screens serve one assessment at a time and demand
+      // marks.external.write to open a COE-owned one, so a theory
+      // course's internal tests never appear to them.
       if (own) return allow('FACULTY(own course)');
       if (hod) return allow('HOD');
+      if (has(actor, 'COE')) return allow('COE');
       return deny('OUT_OF_SCOPE');
+    }
+
+    case 'course.details.write': {
+      // CR-3: the course catalogue is the examinations office's record —
+      // code, title, semester, credits and the Laboratory flag. Faculty
+      // and the HoD read them; nobody else writes them. Deliberately not
+      // folded into course.write, which is the whole of course SETUP and
+      // belongs to the people teaching it.
+      if (course.status === 'LOCKED') return deny('COURSE_LOCKED');
+      return has(actor, 'COE') ? allow('COE') : deny('NOT_PERMITTED');
+    }
+
+    case 'assessment.external.write':
+    case 'marks.external.write': {
+      // The end-semester examination. On a THEORY paper it is set and
+      // marked by the examinations office; on a LABORATORY paper the
+      // department conducts the practical examination itself, so it
+      // falls back to the course's own chain exactly like any other
+      // assessment.
+      if (course.status === 'LOCKED') return deny('COURSE_LOCKED');
+      if (course.isLaboratory) {
+        if (own && course.status === 'DRAFT') return allow('FACULTY(own laboratory course)');
+        if (own) return deny('WRONG_STATUS');
+        return hod ? allow('HOD(laboratory course)') : deny('OUT_OF_SCOPE');
+      }
+      return has(actor, 'COE') ? allow('COE') : deny('NOT_PERMITTED');
     }
 
     case 'course.write':

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { assessmentMarkSummary } from '@copo/db';
 import { CourseMarkImport } from '@/components/CourseMarkImport';
-import { guard } from '@/lib/authz';
+import { canWriteMarks } from '@/lib/authz';
 import { prisma } from '@/lib/db';
 import { requireSession } from '@/lib/session';
 
@@ -9,11 +9,11 @@ import { requireSession } from '@/lib/session';
 export default async function MarksIndexPage({ params }: { params: Promise<{ courseId: string }> }) {
   const user = await requireSession();
   const { courseId } = await params;
-  const canWrite = (await guard.check(user.userId, { type: 'marks.write', courseId })).allow;
 
   const course = await prisma.course.findUniqueOrThrow({
     where: { id: courseId },
     select: {
+      isLaboratory: true,
       _count: { select: { enrolments: true } },
       assessments: {
         orderBy: { displayOrder: 'asc' },
@@ -32,14 +32,21 @@ export default async function MarksIndexPage({ params }: { params: Promise<{ cou
   }
 
   // Per-assessment completeness: attempted cells vs the full grid, aggregated in SQL.
+  //
+  // CR-3 makes "may I enter these marks?" a per-assessment question: the
+  // end-semester paper belongs to the Controller of Examinations on a
+  // theory course and to the department on a practical one, and every
+  // other assessment belongs to the course chain.
   const summaries = await Promise.all(
     course.assessments.map(async (assessment) => {
       const perItem = await assessmentMarkSummary(prisma, assessment.id);
       const attempted = perItem.reduce((sum, item) => sum + item.attempted, 0);
       const cells = assessment._count.items * course._count.enrolments;
-      return { attempted, cells };
+      const mine = await canWriteMarks(user.userId, courseId, assessment.weightGroup);
+      return { attempted, cells, mine };
     }),
   );
+  const canWrite = summaries.some((summary) => summary.mine);
 
   return (
     <div className="space-y-2 max-w-3xl">
@@ -57,6 +64,7 @@ export default async function MarksIndexPage({ params }: { params: Promise<{ cou
               <th className="border border-gray-300 px-2 py-1">Group</th>
               <th className="border border-gray-300 px-2 py-1">Items</th>
               <th className="border border-gray-300 px-2 py-1">Marks entered</th>
+              <th className="border border-gray-300 px-2 py-1 w-40">Entered by</th>
             </tr>
           </thead>
           <tbody>
@@ -74,6 +82,19 @@ export default async function MarksIndexPage({ params }: { params: Promise<{ cou
                   <td className="border border-gray-300 px-2 py-1">
                     {s.attempted} / {s.cells}
                     {s.cells > 0 ? <span className="text-gray-500"> ({Math.round((s.attempted / s.cells) * 100)}%)</span> : null}
+                  </td>
+                  {/* Says plainly whose job each row is, so a blank column
+                      reads as "not yours" rather than as a fault. */}
+                  <td className="border border-gray-300 px-2 py-1 text-xs">
+                    {s.mine ? (
+                      <span className="text-green-800">you</span>
+                    ) : (
+                      <span className="text-gray-500">
+                        {assessment.weightGroup === 'external' && !course.isLaboratory
+                          ? 'Controller of Examinations'
+                          : 'the department'}
+                      </span>
+                    )}
                   </td>
                 </tr>
               );

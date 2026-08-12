@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { bulkUpsertMarks, marksForAssessment, type MarkUpsert } from '@copo/db';
 import { prisma } from '@/lib/db';
-import { guard } from '@/lib/authz';
+import { canWriteMarks, guard, requireMarksWrite } from '@/lib/authz';
 import { logAudit } from '@/lib/audit';
 import { requireSession } from '@/lib/session';
 import { decodeSpreadsheet, decodeWorkbookSheets } from '@/lib/spreadsheet';
@@ -54,9 +54,15 @@ export async function saveMarksAction(
   cells: MarkCellInput[],
 ): Promise<{ ok: boolean; savedAt?: string; error?: string; rejected?: string[] }> {
   const user = await requireSession();
-  const assessment = await prisma.assessment.findUnique({ where: { id: assessmentId }, select: { courseId: true } });
+  const assessment = await prisma.assessment.findUnique({
+    where: { id: assessmentId },
+    select: { courseId: true, weightGroup: true },
+  });
   if (!assessment) return { ok: false, error: 'Assessment not found.' };
-  await guard.require(user.userId, { type: 'marks.write', courseId: assessment.courseId });
+  // CR-3: the end-semester paper is the COE's on a theory course and the
+  // department's on a practical one; every other assessment is the
+  // course chain's.
+  await requireMarksWrite(user.userId, assessment.courseId, assessment.weightGroup);
 
   if (cells.length === 0) return { ok: true, savedAt: new Date().toISOString() };
 
@@ -128,9 +134,12 @@ export async function previewMarkImportAction(
   input: { pasted?: string; formData?: FormData },
 ): Promise<MarkImportPreview> {
   const user = await requireSession();
-  const assessment = await prisma.assessment.findUnique({ where: { id: assessmentId }, select: { courseId: true } });
+  const assessment = await prisma.assessment.findUnique({
+    where: { id: assessmentId },
+    select: { courseId: true, weightGroup: true },
+  });
   if (!assessment) return { ok: false, error: 'Assessment not found.' };
-  await guard.require(user.userId, { type: 'marks.write', courseId: assessment.courseId });
+  await requireMarksWrite(user.userId, assessment.courseId, assessment.weightGroup);
 
   let grid: string[][];
   if (input.pasted !== undefined) {
@@ -166,13 +175,14 @@ export interface CourseMarkImportPreview {
  * receive marks, they get no sheet in the downloaded workbook, and
  * including them here would report them as sheets somebody forgot.
  */
-async function loadCourseImportContext(courseId: string) {
+async function loadCourseImportContext(courseId: string, userId: string) {
   const assessments = await prisma.assessment.findMany({
     where: { courseId },
     orderBy: { displayOrder: 'asc' },
     select: {
       id: true,
       name: true,
+      weightGroup: true,
       items: { orderBy: { displayOrder: 'asc' }, select: { id: true, label: true, maxMark: true } },
     },
   });
@@ -181,7 +191,19 @@ async function loadCourseImportContext(courseId: string) {
     select: { id: true, rosterEntry: { select: { registerNumber: true, student: { select: { fullName: true } } } } },
   });
 
-  const withItems = assessments.filter((assessment) => assessment.items.length > 0);
+  // CR-3: the workbook must not become a way around the split. Only the
+  // assessments this person may actually write are planned against; the
+  // rest are named back so the preview can say why they were left out,
+  // rather than reporting them as sheets matching nothing.
+  const writable: typeof assessments = [];
+  const notPermitted: string[] = [];
+  for (const assessment of assessments) {
+    if (assessment.items.length === 0) continue;
+    if (await canWriteMarks(userId, courseId, assessment.weightGroup)) writable.push(assessment);
+    else notPermitted.push(assessment.name);
+  }
+
+  const withItems = writable;
   const existing = new Map<string, number | null>();
   for (const assessment of withItems) {
     for (const mark of await marksForAssessment(prisma, assessment.id)) {
@@ -201,6 +223,7 @@ async function loadCourseImportContext(courseId: string) {
       studentName: e.rosterEntry.student.fullName,
     })),
     existing,
+    notPermitted,
   };
 }
 
@@ -210,7 +233,9 @@ export async function previewCourseMarkImportAction(
   formData: FormData,
 ): Promise<CourseMarkImportPreview> {
   const user = await requireSession();
-  await guard.require(user.userId, { type: 'marks.write', courseId });
+  // Reading is the bar for previewing; which sheets may actually be
+  // applied is decided per assessment below (CR-3).
+  await guard.require(user.userId, { type: 'marks.read', courseId });
 
   const file = formData.get('file');
   if (!(file instanceof File) || file.size === 0) return { ok: false, error: 'Choose the course mark workbook.' };
@@ -230,12 +255,22 @@ export async function previewCourseMarkImportAction(
     };
   }
 
-  const context = await loadCourseImportContext(courseId);
+  const { notPermitted, ...context } = await loadCourseImportContext(courseId, user.userId);
   if (context.assessments.length === 0) {
-    return { ok: false, error: 'No assessment in this course has any questions yet.' };
+    return {
+      ok: false,
+      error:
+        notPermitted.length > 0
+          ? `Nothing in this course is yours to enter. ${notPermitted.join(', ')} ${notPermitted.length === 1 ? 'is' : 'are'} entered elsewhere.`
+          : 'No assessment in this course has any questions yet.',
+    };
   }
 
-  return { ok: true, fileName: file.name, plan: planCourseImport({ sheets, ...context }) };
+  return {
+    ok: true,
+    fileName: file.name,
+    plan: { ...planCourseImport({ sheets, ...context }), notPermitted },
+  };
 }
 
 /**
@@ -255,7 +290,6 @@ export async function commitCourseMarkImportAction(
   changes: { assessmentId: string; cells: MarkCellInput[] }[],
 ): Promise<{ ok: boolean; applied?: number; assessments?: number; error?: string }> {
   const user = await requireSession();
-  await guard.require(user.userId, { type: 'marks.write', courseId });
 
   const wanted = changes.filter((entry) => entry.cells.length > 0);
   if (wanted.length === 0) return { ok: false, error: 'Nothing to import.' };
@@ -264,7 +298,7 @@ export async function commitCourseMarkImportAction(
   // the payload: the preview it came from is a client-side object.
   const assessments = await prisma.assessment.findMany({
     where: { courseId, id: { in: wanted.map((entry) => entry.assessmentId) } },
-    select: { id: true, name: true, items: { select: { id: true, maxMark: true } } },
+    select: { id: true, name: true, weightGroup: true, items: { select: { id: true, maxMark: true } } },
   });
   const byId = new Map(assessments.map((assessment) => [assessment.id, assessment]));
   const enrolmentIds = new Set(
@@ -275,6 +309,9 @@ export async function commitCourseMarkImportAction(
   for (const entry of wanted) {
     const assessment = byId.get(entry.assessmentId);
     if (!assessment) return { ok: false, error: 'That workbook refers to an assessment this course does not have. Download it again.' };
+    // Per assessment, from its own weight group — the payload arrived
+    // from the client and cannot be trusted about which sheets it holds.
+    await requireMarksWrite(user.userId, courseId, assessment.weightGroup);
     const itemMax = new Map(assessment.items.map((item) => [item.id, item.maxMark.toNumber()]));
 
     const cells: MarkUpsert[] = [];

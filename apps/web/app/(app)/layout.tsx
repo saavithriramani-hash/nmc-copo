@@ -22,7 +22,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     { href: '/', label: 'Courses', show: true },
     { href: '/programmes', label: 'Programmes', show: true },
     { href: '/institution', label: 'Institution', show: readsInstitution },
-    { href: '/templates', label: 'Assessment templates', show: user.hodDepartmentIds.length > 0 },
+    // CR-3: the COE publishes the external examination pattern here too.
+    { href: '/templates', label: 'Assessment templates', show: user.hodDepartmentIds.length > 0 || holds('COE') },
     { href: '/admin/departments', label: 'Departments', show: user.isAdmin },
     { href: '/admin/users', label: 'Accounts & roles', show: user.isAdmin },
     { href: '/audit', label: 'Audit log', show: user.isAdmin || holds('DEAN') || holds('IQAC') },

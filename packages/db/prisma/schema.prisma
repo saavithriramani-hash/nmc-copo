@@ -70,6 +70,7 @@ enum RoleKind {
   PRINCIPAL
   DEAN
   IQAC
+  COE
   HOD
   FACULTY
 }
@@ -123,15 +124,27 @@ model Department {
 /// own COs when adopted. Captured from an existing course's structure;
 /// adoption copies structure only — never marks, never enrolments.
 model AssessmentTemplate {
-  id           String     @id @default(cuid())
-  departmentId String
-  department   Department @relation(fields: [departmentId], references: [id], onDelete: Restrict)
-  name         String
-  description  String?
-  pattern      Json
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  id String @id @default(cuid())
 
+  /// null = an INSTITUTION-WIDE template, owned by the Controller of
+  /// Examinations and adoptable in any department (CR-3: the external
+  /// examination pattern is set centrally). A department id is the
+  /// original case: a pattern the HoD captured from one of their own
+  /// courses, offered only within that department.
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+
+  name        String
+  description String?
+  pattern     Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Names are unique within a department, and separately unique among the
+  // institution-wide ones. Postgres treats NULLs as distinct in a unique
+  // index, so @@unique([departmentId, name]) alone would let the COE
+  // create any number of identically named institution templates —
+  // hence the partial index in the migration for the null case.
   @@unique([departmentId, name])
 }
 
@@ -228,6 +241,15 @@ model Course {
   semester Int
   credits  Decimal?     @db.Decimal(4, 1)
   status   CourseStatus @default(DRAFT)
+
+  /// CR-3: a practical paper, which carries its own course code.
+  ///
+  /// Authorisation only — it changes NO arithmetic. The ten steps, the
+  /// weight groups and every attainment figure are identical either way.
+  /// What it decides is who owns the EXTERNAL assessment: the Controller
+  /// of Examinations for a theory paper, the department for a practical,
+  /// whose external examination the department conducts itself.
+  isLaboratory Boolean @default(false)
 
   // Parameter OVERRIDES (§4): null = inherit programme, then institution.
   // A course-level value records an Academic-Council-minuted exception.

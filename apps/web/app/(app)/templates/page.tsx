@@ -4,15 +4,28 @@ import { prisma } from '@/lib/db';
 import { parsePattern } from '@/lib/setupPlans';
 import { requireSession } from '@/lib/session';
 
-/** Department assessment templates (FR-8) — HoD view. */
+/**
+ * Assessment templates (FR-8) — the HoD's department patterns, and since
+ * CR-3 the Controller of Examinations' institution-wide external
+ * examination patterns.
+ */
 export default async function TemplatesPage() {
   const user = await requireSession();
-  if (user.hodDepartmentIds.length === 0) redirect('/');
+  const isCoe = user.roles.some((role) => role.kind === 'COE');
+  if (user.hodDepartmentIds.length === 0 && !isCoe) redirect('/');
 
   const templates = await prisma.assessmentTemplate.findMany({
-    where: { departmentId: { in: user.hodDepartmentIds } },
+    where: {
+      OR: [
+        // An HoD's own departments…
+        ...(user.hodDepartmentIds.length > 0 ? [{ departmentId: { in: user.hodDepartmentIds } }] : []),
+        // …and the institution-wide ones, which everybody here can adopt
+        // even though only the COE may publish or remove them.
+        { departmentId: null },
+      ],
+    },
     include: { department: true },
-    orderBy: [{ department: { name: 'asc' } }, { name: 'asc' }],
+    orderBy: [{ departmentId: 'asc' }, { name: 'asc' }],
   });
 
   const summarise = (value: unknown): string => {
@@ -40,8 +53,16 @@ export default async function TemplatesPage() {
       <p className="text-xs text-gray-600 max-w-2xl">
         A template captures a course&apos;s whole assessment structure — &quot;two CIAs of four sections, a quiz, a seminar,
         an assignment&quot; — and any course of the department adopts it in one action. Create one from a well-built
-        course: open that course → Assessments → <b>Save as department template</b>.
+        course: open that course → Assessments → <b>Save as template</b>.
       </p>
+      {isCoe ? (
+        <p className="text-xs text-gray-600 max-w-2xl">
+          Templates marked <b>All departments</b> are yours: the college&apos;s external examination pattern, adoptable
+          on any course. They capture the <b>external assessment only</b> — each department sets its own internal
+          tests. Publish one by opening a course whose end-semester paper is set up correctly, then Assessments →
+          Save as template → <b>All departments</b>.
+        </p>
+      ) : null}
 
       {templates.length === 0 ? (
         <p className="text-gray-600">No templates yet.</p>
@@ -59,11 +80,22 @@ export default async function TemplatesPage() {
             {templates.map((template) => (
               <tr key={template.id}>
                 <td className="border border-gray-300 px-2 py-1 font-medium">{template.name}</td>
-                <td className="border border-gray-300 px-2 py-1">{template.department.name}</td>
+                {/* No department = the COE's institution-wide external
+                    examination pattern, adoptable anywhere (CR-3). */}
+                <td className="border border-gray-300 px-2 py-1">
+                  {template.department?.name ?? <span className="text-blue-800">All departments</span>}
+                </td>
                 <td className="border border-gray-300 px-2 py-1 text-xs">{summarise(template.pattern)}</td>
+                {/* Deleting an institution-wide pattern is the COE's; a
+                    department's own is its HoD's. Offered only to whoever
+                    that is, rather than shown and then refused. */}
                 <td className="border border-gray-300 px-2 py-1 text-center">
                   <form action={deleteTemplateAction.bind(null, template.id)}>
-                    <button type="submit" className="text-red-700 hover:underline">delete</button>
+                    {(template.departmentId === null ? isCoe : user.hodDepartmentIds.includes(template.departmentId)) ? (
+                      <button type="submit" className="text-red-700 hover:underline">delete</button>
+                    ) : (
+                      <span className="text-xs text-gray-400">—</span>
+                    )}
                   </form>
                 </td>
               </tr>
