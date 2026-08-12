@@ -149,8 +149,17 @@ export function decide(actor: ActorContext, action: Action, resource: ResourceCo
       // with the HoD under `templates.manage`, which carries a scope.
       return has(actor, 'COE') ? allow('COE') : deny('NOT_PERMITTED');
     }
+    case 'departments.manage': {
+      // CR-5: the examinations office holds the academic structure —
+      // departments and programmes, as it already holds the batches
+      // inside them, the courses, and the rosters. Added, not moved: the
+      // administrator keeps it, because rollover creates structures and
+      // a college between Controllers must not be stranded.
+      if (has(actor, 'ADMIN')) return allow('ADMIN');
+      return has(actor, 'COE') ? allow('COE') : deny('NOT_PERMITTED');
+    }
     case 'users.manage':
-    case 'departments.manage':
+    case 'institution.create':
     case 'rollover.execute':
     case 'backups.manage': {
       return has(actor, 'ADMIN') ? allow('ADMIN') : deny('NOT_PERMITTED');

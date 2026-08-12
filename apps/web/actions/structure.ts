@@ -43,7 +43,11 @@ function isDuplicate(err: unknown): boolean {
 
 export async function createInstitutionAction(_prev: CreateResult | null, formData: FormData): Promise<CreateResult> {
   const user = await requireSession();
-  await guard.require(user.userId, { type: 'departments.manage' });
+  // Not `departments.manage`, which the COE now holds too: this record
+  // carries the institution attainment parameters, and those are the
+  // Dean's alone to set (CR-1). The administrator creates it once at
+  // deployment; the Dean adjusts the figures afterwards.
+  await guard.require(user.userId, { type: 'institution.create' });
   if ((await prisma.institution.count()) > 0) return { error: 'The institution already exists.' };
 
   const name = String(formData.get('name') ?? '').trim();

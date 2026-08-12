@@ -48,7 +48,12 @@ export type InstitutionActionType =
   | 'settings.institution.write' // global attainment defaults (IQAC)
   | 'templates.institution.manage' // CR-3: institution-wide external exam patterns (COE)
   | 'users.manage' // accounts + role assignments (admin)
-  | 'departments.manage' // institution, departments, programmes, rollover structures (batches are `batches.manage`)
+  // CR-5 splits what used to be one action. Creating the institution
+  // record seeds the institution attainment parameters (§4.2–§4.4), and
+  // CR-1 made the Dean the only role that sets those — so it cannot ride
+  // along with the department and programme tree.
+  | 'institution.create' // the one-shot institution record, at deployment (admin)
+  | 'departments.manage' // departments and programmes (batches are `batches.manage`)
   | 'rollover.execute' // academic-year rollover
   | 'backups.manage' // backup/restore operations
   | 'audit.read'; // the audit log itself

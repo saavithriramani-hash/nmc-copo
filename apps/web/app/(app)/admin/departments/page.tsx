@@ -3,13 +3,20 @@ import { redirect } from 'next/navigation';
 import { createDepartmentAction, createInstitutionAction, createProgrammeAction } from '@/actions/structure';
 import { CreateForm } from '@/components/CreateForm';
 import { StructureControls } from '@/components/StructureControls';
+import { guard } from '@/lib/authz';
 import { prisma } from '@/lib/db';
 import { requireSession } from '@/lib/session';
 import { pluralise } from '@/lib/structureAdmin';
 
 export default async function DepartmentsPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const user = await requireSession();
-  if (!user.isAdmin) redirect('/');
+  // The Guard decides, not a role test here: CR-5 gave this screen a
+  // second holder, and `user.isAdmin` would have kept the COE out of a
+  // page whose every action now admits them.
+  if (!(await guard.check(user.userId, { type: 'departments.manage' })).allow) redirect('/');
+  // Creating the institution is still the administrator's alone — it
+  // seeds the attainment parameters, which are the Dean's to set.
+  const canCreateInstitution = (await guard.check(user.userId, { type: 'institution.create' })).allow;
   const { error } = await searchParams;
 
   const institution = await prisma.institution.findFirst();
@@ -29,7 +36,15 @@ export default async function DepartmentsPage({ searchParams }: { searchParams: 
       <h1 className="text-lg font-semibold">Departments &amp; programmes</h1>
       {error ? <p className="text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">{error}</p> : null}
 
-      {!institution ? (
+      {!institution && !canCreateInstitution ? (
+        // Only reachable before deployment is finished. Better than an
+        // "Add department" form that fails on "Create the institution
+        // first" — this says who to ask.
+        <p className="text-gray-700 bg-gray-100 border border-gray-200 rounded px-3 py-2 max-w-lg">
+          The institution record has not been created yet, and departments hang from it. The system administrator
+          creates it once, when the system is installed.
+        </p>
+      ) : !institution ? (
         <div className="bg-white border border-gray-300 rounded p-4 space-y-2 max-w-lg">
           <p className="font-medium">Create the institution</p>
           <p className="text-xs text-gray-600">

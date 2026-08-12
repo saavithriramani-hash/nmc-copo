@@ -25,7 +25,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     { href: '/institution', label: 'Institution', show: readsInstitution },
     // CR-3: the COE publishes the external examination pattern here too.
     { href: '/templates', label: 'Assessment templates', show: user.hodDepartmentIds.length > 0 || holds('COE') },
-    { href: '/admin/departments', label: 'Departments', show: user.isAdmin },
+    // CR-5: departments and programmes are the examinations office's too.
+    { href: '/admin/departments', label: 'Departments', show: user.isAdmin || holds('COE') },
     { href: '/admin/users', label: 'Accounts & roles', show: user.isAdmin },
     { href: '/audit', label: 'Audit log', show: user.isAdmin || holds('DEAN') || holds('IQAC') },
     { href: '/admin/health', label: 'System health', show: user.isAdmin || readsInstitution },

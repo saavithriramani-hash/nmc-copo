@@ -363,12 +363,36 @@ describe('policy — the catalogue and the register moved to the COE (CR-3)', ()
   });
 
   it('the COE gains nothing institution-wide beyond its own remit', () => {
-    // The point of separate actions. Had CR-3 been implemented by handing
-    // the COE `departments.manage`, this would pass silently and the
-    // examinations office could reorganise the college.
-    for (const type of ['departments.manage', 'users.manage', 'rollover.execute', 'backups.manage', 'settings.institution.write', 'institution.read', 'audit.read'] as const) {
+    // The point of separate actions. `departments.manage` was on this
+    // list until CR-5 granted it deliberately; everything else here is
+    // still someone else's — accounts and backups the administrator's,
+    // the attainment parameters the Dean's, reading the whole college
+    // the read-all roles'.
+    for (const type of ['users.manage', 'rollover.execute', 'backups.manage', 'settings.institution.write', 'institution.read', 'audit.read'] as const) {
       expect(decide(coe, { type }, null).allow, type).toBe(false);
     }
+  });
+
+  it('holds the academic structure, but not the parameters inside the institution record (CR-5)', () => {
+    // Departments and programmes, as the COE already holds the batches
+    // inside them, the courses, and the rosters.
+    expect(decide(coe, { type: 'departments.manage' }, null)).toEqual({ allow: true, via: 'COE' });
+
+    // Creating the institution seeds the attainment parameters, and CR-1
+    // made the Dean the only role that sets those — so it stayed behind
+    // when the rest of the tree moved. Nobody but the administrator, who
+    // does it once at deployment.
+    expect(decide(coe, { type: 'institution.create' }, null)).toEqual({ allow: false, reason: 'NOT_PERMITTED' });
+    for (const who of [dean, hodMath, facultyMath1, iqac, principal]) {
+      expect(decide(who, { type: 'institution.create' }, null).allow).toBe(false);
+    }
+    expect(decide(admin, { type: 'institution.create' }, null)).toEqual({ allow: true, via: 'ADMIN' });
+  });
+
+  it('the administrator keeps the structure too — added, not moved (CR-5)', () => {
+    // Rollover creates structures, and a college between Controllers
+    // must not be stranded without anyone able to add a programme.
+    expect(decide(admin, { type: 'departments.manage' }, null)).toEqual({ allow: true, via: 'ADMIN' });
   });
 
   it('an unknown department denies before any role is consulted', () => {
