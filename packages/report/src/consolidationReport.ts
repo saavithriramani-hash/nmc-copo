@@ -1,11 +1,9 @@
 import { drawSpider, drawTrend } from './charts/draw';
 import { ReportDoc, type Cell, type Column } from './doc';
+import { fmt } from './format';
 import { groupByDepartment, meanByPo, semestersPresent, type CourseRow, type MeanCell } from './grouping';
 import { COLOR, CONTENT, SIZE } from './theme';
 import type { ConsolidationReportData } from './types';
-
-const fmt = (value: number | null | undefined, dp = 3): string =>
-  value === null || value === undefined ? '—' : value.toFixed(dp);
 
 function scopeLine(data: ConsolidationReportData): string {
   const parts: string[] = [];

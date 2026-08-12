@@ -1,12 +1,9 @@
 import { drawCoBars, drawSpider, drawTargetVsAchieved } from './charts/draw';
 import { ReportDoc, type Cell, type Column } from './doc';
+import { fmt, pct } from './format';
 import { analyseGaps } from './gap';
 import { COLOR, CONTENT, SIZE } from './theme';
 import type { CourseReportData } from './types';
-
-const fmt = (value: number | null | undefined, dp = 3): string =>
-  value === null || value === undefined ? '—' : value.toFixed(dp);
-const pct = (value: number | null): string => (value === null ? '—' : `${value.toFixed(1)}%`);
 
 /**
  * The course attainment report (FR-19) — the sheet that is printed,

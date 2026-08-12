@@ -70,6 +70,13 @@ export default async function AttainmentPage({ params }: { params: Promise<{ cou
             fallbackName={`CO-PO_${course.code}.pdf`}
           />
         </span>
+        {/* Same report as the PDF, editable — the action plan (§4.5) is
+            written by the faculty, and a PDF cannot be written in. */}
+        <DownloadButton
+          href={`/api/courses/${courseId}/report-docx`}
+          label="Word report"
+          fallbackName={`CO-PO_${course.code}.docx`}
+        />
         <DownloadButton
           href={`/api/courses/${courseId}/export`}
           label="Export to Excel"
