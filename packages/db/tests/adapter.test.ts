@@ -118,14 +118,14 @@ function fixtureCourse(overrides: CourseOverrides = {}): CourseForInput {
             displayOrder: 1,
             optionalAnswerCount: null,
             items: [
-              { id: 'q1', assessmentId: 'cia1', sectionId: 'secA', label: 'Q1', maxMark: D('2'), coId: 'co1', displayOrder: 1 },
-              { id: 'q2', assessmentId: 'cia1', sectionId: 'secA', label: 'Q2', maxMark: D('5'), coId: null, displayOrder: 2 },
+              { id: 'q1', assessmentId: 'cia1', sectionId: 'secA', label: 'Q1', maxMark: D('2'), coId: 'co1', displayOrder: 1, bloomLevel: null },
+              { id: 'q2', assessmentId: 'cia1', sectionId: 'secA', label: 'Q2', maxMark: D('5'), coId: null, displayOrder: 2, bloomLevel: null },
             ],
           },
         ],
         items: [
-          { id: 'q1', assessmentId: 'cia1', sectionId: 'secA', label: 'Q1', maxMark: D('2'), coId: 'co1', displayOrder: 1 },
-          { id: 'q2', assessmentId: 'cia1', sectionId: 'secA', label: 'Q2', maxMark: D('5'), coId: null, displayOrder: 2 },
+          { id: 'q1', assessmentId: 'cia1', sectionId: 'secA', label: 'Q1', maxMark: D('2'), coId: 'co1', displayOrder: 1, bloomLevel: null },
+          { id: 'q2', assessmentId: 'cia1', sectionId: 'secA', label: 'Q2', maxMark: D('5'), coId: null, displayOrder: 2, bloomLevel: null },
         ],
         coTags: [],
       },
@@ -139,7 +139,7 @@ function fixtureCourse(overrides: CourseOverrides = {}): CourseForInput {
         displayOrder: 2,
         sections: [],
         items: [
-          { id: 'z1', assessmentId: 'quiz1', sectionId: null, label: 'Q1', maxMark: D('1'), coId: 'co2', displayOrder: 1 },
+          { id: 'z1', assessmentId: 'quiz1', sectionId: null, label: 'Q1', maxMark: D('1'), coId: 'co2', displayOrder: 1, bloomLevel: null },
         ],
         coTags: [],
       },
@@ -153,7 +153,7 @@ function fixtureCourse(overrides: CourseOverrides = {}): CourseForInput {
         displayOrder: 3,
         sections: [],
         items: [
-          { id: 'endsem-score', assessmentId: 'endsem', sectionId: null, label: 'Total', maxMark: D('75'), coId: null, displayOrder: 1 },
+          { id: 'endsem-score', assessmentId: 'endsem', sectionId: null, label: 'Total', maxMark: D('75'), coId: null, displayOrder: 1, bloomLevel: null },
         ],
         coTags: [],
       },
@@ -279,7 +279,7 @@ describe('buildCourseInput — corrupt structure is an AdapterError, never a gue
     const endsem = course.assessments.find((a) => a.id === 'endsem')!;
     endsem.items = [
       ...endsem.items,
-      { id: 'extra', assessmentId: 'endsem', sectionId: null, label: 'Extra', maxMark: D('10'), coId: null, displayOrder: 2 },
+      { id: 'extra', assessmentId: 'endsem', sectionId: null, label: 'Extra', maxMark: D('10'), coId: null, displayOrder: 2, bloomLevel: null },
     ];
     expect(() => buildCourseInput(course, MARKS)).toThrow(AdapterError);
   });
@@ -289,7 +289,7 @@ describe('buildCourseInput — corrupt structure is an AdapterError, never a gue
     const cia1 = course.assessments.find((a) => a.id === 'cia1')!;
     cia1.items = [
       ...cia1.items,
-      { id: 'stray', assessmentId: 'cia1', sectionId: null, label: 'Stray', maxMark: D('2'), coId: null, displayOrder: 3 },
+      { id: 'stray', assessmentId: 'cia1', sectionId: null, label: 'Stray', maxMark: D('2'), coId: null, displayOrder: 3, bloomLevel: null },
     ];
     expect(() => buildCourseInput(course, MARKS)).toThrow(AdapterError);
   });

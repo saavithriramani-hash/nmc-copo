@@ -156,7 +156,18 @@ export type WarningCode =
   | 'NO_FEEDBACK_FOR_CO'       // zero responses for one CO while the course has feedback
   | 'NO_INDIRECT_DATA'         // §5.1: no feedback at all → direct-only course
   | 'PO_UNMAPPED'              // no CO maps to this PO/PSO
-  | 'NO_ASSESSED_COS';         // no CO has a final value; PO projection impossible
+  | 'NO_ASSESSED_COS'          // no CO has a final value; PO projection impossible
+  // ── knowledge levels (knowledgeLevels.ts) ──────────────────────────
+  // A standalone measurement, not one of the ten steps: computeCourse
+  // never emits these, and nothing here reaches CO or PO attainment.
+  // They share this type so the application has one warning shape to
+  // render, not two.
+  | 'KL_NO_TAGGED_ITEMS'       // no question carries a knowledge level
+  | 'KL_LEVEL_UNKNOWN'         // a question tagged outside the taxonomy
+  | 'KL_LEVEL_NOT_EXAMINED'    // the paper allots a level no marks
+  | 'KL_STUDENT_ABSENT'        // attempted nothing; excluded from class figures
+  | 'KL_MARKS_UNATTEMPTED'     // blanks stay in the denominator by this method
+  | 'KL_NO_STUDENTS_PRESENT';  // nobody attempted anything
 
 /** Identifies the entity a warning refers to. Only the relevant ids are set. */
 export interface WarningRef {

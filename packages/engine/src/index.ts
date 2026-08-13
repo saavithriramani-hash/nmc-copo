@@ -35,3 +35,19 @@ export { step9FinalCoAttainment } from './steps/step9FinalCo';
 export { step10PoAttainment } from './steps/step10Po';
 
 export { computeCourse } from './computeCourse';
+
+/**
+ * Learning outcome by knowledge level — standalone, and no part of the
+ * ten steps. `computeCourse` does not call it and no attainment figure
+ * depends on it; see the header of knowledgeLevels.ts.
+ */
+export {
+  computeKnowledgeLevels,
+  type KnowledgeItem,
+  type KnowledgeLevelInput,
+  type KnowledgeLevelResult,
+  type BlueprintRow,
+  type StudentLevelRow,
+  type StudentKnowledgeRow,
+  type CohortLevelRow,
+} from './knowledgeLevels';

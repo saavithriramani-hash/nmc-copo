@@ -38,6 +38,27 @@ out at those.
 Blank ≠ zero throughout: a CO assessed nowhere, an item nobody attempted,
 and a PO no CO maps to all come out **empty**, never 0.
 
+## The learning outcome workbook (CR-7)
+
+A **separate** document, built by `buildLearningOutcomeWorkbook` — the
+college's *Expected (QP) and Actual* sheets, for one question paper. No
+part of the ten steps; see `@copo/engine`'s `computeKnowledgeLevels`.
+
+| Sheet | Contents |
+|---|---|
+| `Expected (QP)` | The blueprint, laid out as the college's own: questions down, knowledge levels across, each question's marks under its own level, totalled into the expected share of the paper |
+| `Attained - Students` | A student per row, with % and level 0–3 per knowledge level. The college's sheet is one student per file; the same figures are gathered into one table here |
+| `Attained - Class` | The class roll-up, the absentee count, and the engine's notes |
+
+An absent student's cells are **blank**, not 0 — they did not attain
+nothing, they sat nothing.
+
+One quirk worth knowing: exceljs drops a cached formula result of `0` when
+writing (it treats it as falsy), so a cell whose value is 0 arrives with
+no cached result. Harmless — Excel recalculates it on open, verified by
+opening a generated file in Excel — but it is why the tests assert those
+cells through their formula rather than a cached value.
+
 ## The round-trip test
 
 `npm test` generates the workbook, writes it to a real `.xlsx` buffer,

@@ -8,6 +8,7 @@ import {
   type StructureSectionInput,
 } from '@/actions/assessment';
 import { assessmentMaxima, formatMark } from '@/lib/assessmentMaxima';
+import { BLOOM_LEVELS, bloomShortLabel } from '@/lib/bloom';
 import { formatThresholdPercent } from '@/lib/courseThreshold';
 
 interface CoOption {
@@ -63,7 +64,15 @@ export function StructureEditor({ assessmentId, shape, canEdit, cos, weightGroup
     setMessage(null);
   };
 
-  const newItem = (count: number): StructureItemInput => ({ id: null, label: `Q${count + 1}`, maxMark: 2, coId: null });
+  const newItem = (count: number): StructureItemInput => ({
+    id: null,
+    label: `Q${count + 1}`,
+    maxMark: 2,
+    coId: null,
+    // Untagged: the level is a judgement about the question, and
+    // defaulting it would put a claim on the report nobody made.
+    bloomLevel: null,
+  });
 
   // ── section helpers ──
   const updateSection = (index: number, patch: Partial<StructureSectionInput>) => {
@@ -126,6 +135,26 @@ export function StructureEditor({ assessmentId, shape, canEdit, cos, weightGroup
         <select
           value={item.coId ?? ''}
           onChange={(e) => onChange({ coId: e.target.value === '' ? null : e.target.value })}
+          className="w-full border-0 py-1"
+        >
+          <option value="">— every CO —</option>
+          {cos.map((co) => (
+            <option key={co.id} value={co.id}>
+              {co.code}
+            </option>
+          ))}
+        </select>
+      </td>
+      {/*
+        CR-7. What the QUESTION asks, which is not what the OUTCOME spans
+        — a CO carries its own levels, and this is deliberately a separate
+        choice. Optional: untagged simply stays out of the learning
+        outcome report, and no attainment figure depends on it.
+      */}
+      <td className="border border-gray-300 px-1 py-0.5">
+        <select
+          value={item.bloomLevel ?? ''}
+          onChange={(e) => onChange({ bloomLevel: e.target.value === '' ? null : e.target.value })}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && onEnterLast) {
               e.preventDefault();
@@ -134,10 +163,10 @@ export function StructureEditor({ assessmentId, shape, canEdit, cos, weightGroup
           }}
           className="w-full border-0 py-1"
         >
-          <option value="">— every CO —</option>
-          {cos.map((co) => (
-            <option key={co.id} value={co.id}>
-              {co.code}
+          <option value="">— none —</option>
+          {BLOOM_LEVELS.map((level) => (
+            <option key={level} value={level}>
+              {bloomShortLabel(level)}
             </option>
           ))}
         </select>
@@ -163,6 +192,9 @@ export function StructureEditor({ assessmentId, shape, canEdit, cos, weightGroup
               figure, the assessments list — read "Maximum marks". */}
           <th className="border border-gray-300 px-2 py-1 w-24">Max mark</th>
           <th className="border border-gray-300 px-2 py-1 w-40">CO tag</th>
+          <th className="border border-gray-300 px-2 py-1 w-44" title="What this question asks the student to do. Used only by the learning outcome report.">
+            Knowledge level
+          </th>
           <th className="border border-gray-300 px-2 py-1 w-20"></th>
         </tr>
       </thead>

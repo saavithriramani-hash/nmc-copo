@@ -7,6 +7,7 @@ import { Prisma } from '@copo/db';
 import { prisma } from '@/lib/db';
 import { guard, requireAssessmentWrite } from '@/lib/authz';
 import { logAudit } from '@/lib/audit';
+import { isBloomLevel } from '@/lib/bloom';
 import { resolveCourseParameters } from '@/lib/params';
 import { requireSession } from '@/lib/session';
 
@@ -132,6 +133,12 @@ export interface StructureItemInput {
   label: string;
   maxMark: number;
   coId: string | null;
+  /**
+   * CR-7: the knowledge level this question examines. Null = untagged,
+   * and left out of the learning-outcome report. Optional on the wire so
+   * a caller written before CR-7 still saves a valid structure.
+   */
+  bloomLevel?: string | null;
 }
 export interface StructureSectionInput {
   id: string | null;
@@ -200,6 +207,12 @@ export async function saveAssessmentStructureAction(
     if (!item.label.trim()) return { error: 'Every item needs a label.' };
     if (!Number.isFinite(item.maxMark) || item.maxMark <= 0) return { error: `Item '${item.label}': maximum mark must be positive.` };
     if (item.coId !== null && !coIds.has(item.coId)) return { error: `Item '${item.label}': unknown CO tag.` };
+    // Checked here as well as by the database CHECK, so a mistyped level
+    // is a sentence the faculty can act on rather than a constraint
+    // violation surfacing as a server error.
+    if (item.bloomLevel != null && !isBloomLevel(item.bloomLevel)) {
+      return { error: `Item '${item.label}': '${item.bloomLevel}' is not a knowledge level.` };
+    }
   }
   const labels = allItems.map((item) => item.label.trim());
   if (new Set(labels).size !== labels.length) return { error: 'Item labels must be unique within the assessment.' };
@@ -271,6 +284,7 @@ export async function saveAssessmentStructureAction(
               label: item.label.trim(),
               maxMark: new Prisma.Decimal(item.maxMark),
               coId: item.coId,
+              bloomLevel: item.bloomLevel ?? null,
               sectionId,
               displayOrder: itemIndex + 1,
             };
@@ -284,6 +298,7 @@ export async function saveAssessmentStructureAction(
             label: item.label.trim(),
             maxMark: new Prisma.Decimal(item.maxMark),
             coId: item.coId,
+            bloomLevel: item.bloomLevel ?? null,
             displayOrder: itemIndex + 1,
           };
           if (item.id) await tx.item.update({ where: { id: item.id }, data });

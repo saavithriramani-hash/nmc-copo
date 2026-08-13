@@ -405,6 +405,16 @@ model Item {
   maxMark      Decimal    @db.Decimal(6, 2)
   coId         String?
   co           CourseOutcome? @relation(fields: [coId], references: [id], onDelete: Restrict)
+  /// The knowledge level this question examines (CR-7), for the learning
+  /// outcome report. Null = untagged, and excluded from that report
+  /// entirely — it never stands in for a level.
+  ///
+  /// Separate from CourseOutcome.bloomLevels, which describes what an
+  /// OUTCOME spans; this describes what a QUESTION asks. Unlike that
+  /// field this one is load-bearing, but only for the standalone
+  /// learning-outcome figures: no CO or PO attainment reads it, and the
+  /// ten steps do not know it exists.
+  bloomLevel   String?
   displayOrder Int
 
   markValues MarkValue[]

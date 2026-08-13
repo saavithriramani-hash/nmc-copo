@@ -31,6 +31,25 @@ Steps 6 and 7 are Step 5 applied to the continuous and external groups
 result object carries the inputs and intermediate figures that produced
 it, so a UI can drill from any PO figure down to a single item (FR-14/15).
 
+## Learning outcome by knowledge level (CR-7) — not one of the steps
+
+`computeKnowledgeLevels` reads a question paper by the knowledge level
+each question examines: the paper's **blueprint** (the share of its marks
+per level, which needs no marks at all) and what each student earned
+against those allotments, banded 0–3, plus the class.
+
+It is **standalone**. `computeCourse` does not call it, no CO or PO figure
+reads it, and removing it would leave the ten steps byte-identical. It
+shares the warning type and the band table, nothing else.
+
+One invariant is deliberately inverted here, and only here: **the
+denominator is the marks the paper allotted, not the marks attempted**,
+because an outcome the student did not demonstrate is not an outcome they
+attained — that is the college's method, and the figure would mean
+something else otherwise. Blank is still not zero: unattempted marks are
+counted and reported separately, a student who attempted nothing is
+*absent* rather than scoring nothing, and the class figures exclude them.
+
 ## Invariants enforced here
 
 - **Blank ≠ zero.** A blank mark is `null` — "did not attempt", excluded
@@ -62,7 +81,7 @@ never use them.
 
 ## Testing policy (NFR-7)
 
-`npm test` — vitest, 108 tests. All fixtures are **synthetic, with
+`npm test` — vitest, 136 tests. All fixtures are **synthetic, with
 expected values worked out by hand** before the assertions were written
 (the derivations are in the fixture/test comments — start with
 `tests/fixtures/e2eCourse.ts`). No real or sample course data is used as
@@ -70,6 +89,12 @@ an oracle. Covered explicitly: every shape and scoring rule, marks exactly
 on the threshold, cohort percentages exactly on 80/60/40 and just below,
 every §5.1 degenerate case, blank-vs-zero A/B at course level, and courses
 with five sectioned tests and with one (nothing assumes two).
+
+The knowledge-level tests (CR-7) treat the college's workbook as a
+statement of the **method** and never as an oracle for a number: its
+figures are re-derived from first principles here, and one test exists
+because the sheet's own `IF(x>79,"3",…)` awards level 3 to 79.5% while
+the table printed beside it says 60–79 → 2.
 
 `npm run typecheck` — strict TypeScript with `noUncheckedIndexedAccess`
 and `exactOptionalPropertyTypes`.

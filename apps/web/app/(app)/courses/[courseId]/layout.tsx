@@ -46,6 +46,9 @@ export default async function CourseLayout({
     { href: `/courses/${courseId}/feedback`, label: 'Feedback' },
     { href: `/courses/${courseId}/review`, label: 'Review' },
     { href: `/courses/${courseId}/attainment`, label: 'Attainment' },
+    // CR-7. After Attainment, because it is a separate reading of the
+    // same marks and not a step towards the attainment figures.
+    { href: `/courses/${courseId}/learning-outcome`, label: 'Learning outcome' },
     { href: `/courses/${courseId}/versions`, label: 'Versions' },
     { href: `/courses/${courseId}/settings`, label: 'Parameters' },
   ];

@@ -10,3 +10,10 @@
 export { buildWorkbook, buildWorkbookWithIndex, buildWorkbookBuffer, exportFileName, SHEET } from './workbook';
 export type { WorkbookIndex } from './workbook';
 export type { ExportInput, ExportCourseMeta, ExportRefs } from './types';
+
+/**
+ * The learning outcome workbook (CR-7) — a separate document from the
+ * departmental workbook above, and separately built: it reports the
+ * knowledge levels a paper examines, which is no part of the ten steps.
+ */
+export { buildLearningOutcomeWorkbook, type LearningOutcomeInput } from './learningOutcome';

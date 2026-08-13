@@ -79,11 +79,18 @@ export default async function AssessmentEditorPage({
               label: item.label,
               maxMark: item.maxMark.toNumber(),
               coId: item.coId,
+              bloomLevel: item.bloomLevel,
             })),
           })),
           items:
             assessment.shape === 'ITEM_LIST'
-              ? assessment.items.map((item) => ({ id: item.id, label: item.label, maxMark: item.maxMark.toNumber(), coId: item.coId }))
+              ? assessment.items.map((item) => ({
+                  id: item.id,
+                  label: item.label,
+                  maxMark: item.maxMark.toNumber(),
+                  coId: item.coId,
+                  bloomLevel: item.bloomLevel,
+                }))
               : [],
           singleMaxMark: singleItem ? singleItem.maxMark.toNumber() : null,
           coTagIds: assessment.coTags.map((tag) => tag.coId),
