@@ -1,5 +1,6 @@
 import { Fragment } from 'react';
 import Link from 'next/link';
+import { notFound } from 'next/navigation';
 import { DownloadButton } from '@/components/DownloadButton';
 import { guard } from '@/lib/authz';
 import { knowledgeLevelReport, taggedAssessments } from '@/lib/knowledgeLevels';
@@ -25,7 +26,11 @@ export default async function LearningOutcomePage({
   const user = await requireSession();
   const { courseId } = await params;
   const { a } = await searchParams;
-  await guard.require(user.userId, { type: 'course.read', courseId });
+  // check + notFound, never require: a denial from `require` throws and
+  // reaches the reader as "Application error", which reads as a broken
+  // system rather than a page that is not theirs. Every other page here
+  // answers 404.
+  if (!(await guard.check(user.userId, { type: 'course.read', courseId })).allow) notFound();
 
   // Per-student marks are the department chain's (NFR-10). The class
   // figures are not, so a reader without this stays on the page and sees

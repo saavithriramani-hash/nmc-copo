@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { LearnerRatingGrid } from '@/components/LearnerRatingGrid';
 import { guard } from '@/lib/authz';
+import { prisma } from '@/lib/db';
 import { courseRatingSheet } from '@/lib/learnerCategories';
 import { requireSession } from '@/lib/session';
 
@@ -19,10 +20,61 @@ import { requireSession } from '@/lib/session';
 export default async function CourseLearnersPage({ params }: { params: Promise<{ courseId: string }> }) {
   const user = await requireSession();
   const { courseId } = await params;
-  // Reading the sheet names individual students, so it follows the same
-  // bar as their marks (NFR-10) rather than course.read.
-  await guard.require(user.userId, { type: 'marks.read', courseId });
+  // Gated on `learners.rate`, NOT on `marks.read`.
+  //
+  // The obvious reading — "it names students, so use the marks bar" —
+  // is wrong, and quietly so. CR-3 gave the examinations office
+  // `marks.read` for one purpose: they enter the end-semester paper and
+  // cannot do it blind. That grant is bounded at the point of use, so a
+  // theory course's internal tests never appear to them. Nothing here is
+  // a mark. These are a teacher's judgements of a student's attitude,
+  // interaction and interest, and the COE has no business reading them
+  // for every course in the college. `learners.rate` is exactly the
+  // department chain — the course's own faculty and their HoD — which is
+  // the audience this sheet has always been described as having.
+  //
+  // Read and write are one check because the audience is identical: in
+  // this role model there is nobody who may read a colleague's
+  // judgements without also being able to correct them.
+  //
+  // Checked, never `require`d: a denial from `require` throws and reaches
+  // the reader as "Application error", which reads as a broken system
+  // rather than a page that is not theirs. And not `notFound` either —
+  // the course layout admits anyone with course.read, so the Dean, the
+  // IQAC and the COE all see this tab and can click it. A 404 on a tab
+  // the application itself offered is a dead end; the restriction is
+  // explained instead, exactly as the learning-outcome page explains the
+  // per-student table it withholds from the same readers.
   const canEdit = (await guard.check(user.userId, { type: 'learners.rate', courseId })).allow;
+  const canSee = canEdit;
+
+  const course = await prisma.course.findUnique({
+    where: { id: courseId },
+    select: { semester: true, batchId: true, batch: { select: { programmeId: true } } },
+  });
+  if (!course) notFound();
+
+  if (!canSee) {
+    return (
+      <div className="space-y-4">
+        <h2 className="font-medium">Slow and advanced learners — this subject</h2>
+        <p className="text-sm text-gray-700 max-w-3xl">
+          This sheet is a teacher&apos;s judgement of each student by name, so it is restricted to the course faculty
+          and their department chain (NFR-10).
+        </p>
+        <p className="text-sm text-gray-700 max-w-3xl">
+          The classification these ratings feed is a semester figure, and its counts and distribution — which name
+          nobody — are open to you there.
+        </p>
+        <Link
+          href={`/programmes/${course.batch.programmeId}/learners?batch=${course.batchId}&semester=${course.semester}`}
+          className="text-blue-700 hover:underline text-sm"
+        >
+          Semester classification →
+        </Link>
+      </div>
+    );
+  }
 
   const sheet = await courseRatingSheet(courseId);
   if (!sheet) notFound();

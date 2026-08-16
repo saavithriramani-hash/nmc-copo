@@ -28,7 +28,13 @@ export default async function ProgrammeLearnersPage({
   const user = await requireSession();
   const { programmeId } = await params;
   const { batch: batchParam, semester: semesterParam } = await searchParams;
-  await guard.require(user.userId, { type: 'programme.read', programmeId });
+  // check + notFound, never require: a denial from `require` throws and
+  // surfaces as "Application error: a server-side exception has
+  // occurred", which tells the reader nothing and looks like a fault in
+  // the system rather than a page that is not theirs. Every other page
+  // here answers 404, and so must this one — whether a programme exists
+  // is itself something the caller may not be entitled to learn.
+  if (!(await guard.check(user.userId, { type: 'programme.read', programmeId })).allow) notFound();
 
   const [canSeeNames, canConfigure] = await Promise.all([
     guard.check(user.userId, { type: 'learners.read', programmeId }).then((d) => d.allow),
