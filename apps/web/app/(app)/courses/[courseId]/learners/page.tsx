@@ -39,8 +39,14 @@ export default async function CourseLearnersPage({ params }: { params: Promise<{
     <div className="space-y-4">
       <div className="flex flex-wrap items-baseline gap-3">
         <h2 className="font-medium">Slow and advanced learners — this subject</h2>
+        {/*
+          The batch as well as the semester: without it the classification
+          page falls back to whichever batch it finds first, and a
+          department running three cohorts at once would land on the wrong
+          one — showing a semester this course's students are not in.
+        */}
         <Link
-          href={`/programmes/${sheet.course.programmeId}/learners?semester=${sheet.course.semester}`}
+          href={`/programmes/${sheet.course.programmeId}/learners?batch=${sheet.course.batchId}&semester=${sheet.course.semester}`}
           className="ml-auto text-blue-700 hover:underline text-sm"
         >
           Semester classification →

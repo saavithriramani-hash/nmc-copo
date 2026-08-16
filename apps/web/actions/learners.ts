@@ -144,7 +144,7 @@ export async function saveLearnerCriteriaAction(
 
   const existing = await prisma.learnerCriterion.findMany({
     where: { programmeId },
-    select: { id: true, _count: { select: { ratings: true } } },
+    select: { id: true, label: true, _count: { select: { ratings: true } } },
   });
   const keep = new Set(cleaned.map((c) => c.id).filter(Boolean) as string[]);
   const doomed = existing.filter((e) => !keep.has(e.id));
@@ -154,6 +154,30 @@ export async function saveLearnerCriteriaAction(
       ok: false,
       error: `${rated.length} criterion/criteria already carry ratings and cannot be removed. Clear their ratings first if you really mean to drop them.`,
     };
+  }
+
+  // Lowering a maximum below a rating already entered against it would
+  // leave rows the engine refuses — it throws on a rating outside
+  // 0..maxScore, which would take the whole classification page down
+  // rather than showing a bad figure. Refused here, where it can be
+  // explained, instead of being discovered as a broken report.
+  const lowering = cleaned.filter((c) => c.id && existing.some((e) => e.id === c.id));
+  if (lowering.length > 0) {
+    const highest = await prisma.learnerRating.groupBy({
+      by: ['criterionId'],
+      where: { criterionId: { in: lowering.map((c) => c.id!) } },
+      _max: { score: true },
+    });
+    const byId = new Map(highest.map((h) => [h.criterionId, Number(h._max.score ?? 0)]));
+    for (const criterion of lowering) {
+      const top = byId.get(criterion.id!);
+      if (top !== undefined && top > criterion.maxScore) {
+        return {
+          ok: false,
+          error: `“${criterion.label}” already carries a rating of ${top}, so its maximum cannot be lowered to ${criterion.maxScore}. Raise the maximum, or correct the ratings above it first.`,
+        };
+      }
+    }
   }
 
   await prisma.$transaction(async (tx) => {

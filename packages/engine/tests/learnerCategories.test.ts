@@ -404,11 +404,26 @@ describe('configuration', () => {
   });
 
   it('refuses a rating above the criterion maximum', () => {
+    // A contract violation, not a figure — so it throws rather than
+    // producing a percentage above 100. Reachable only by lowering a
+    // maximum after ratings were entered, which the write path refuses
+    // and the reader filters out (see apps/web/lib/learnerCategories.ts);
+    // this is the backstop behind both.
     const course: LearnerCourseRatings = {
       courseId: 'c',
       courseTitle: 'C',
       studentIds: ['s1'],
       scores: { s1: { interaction: 25 } },
+    };
+    expect(() => run({ courses: [course], studentIds: ['s1'] })).toThrow(/outside 0\.\.20/);
+  });
+
+  it('refuses a negative rating too', () => {
+    const course: LearnerCourseRatings = {
+      courseId: 'c',
+      courseTitle: 'C',
+      studentIds: ['s1'],
+      scores: { s1: { interaction: -1 } },
     };
     expect(() => run({ courses: [course], studentIds: ['s1'] })).toThrow(/outside 0\.\.20/);
   });

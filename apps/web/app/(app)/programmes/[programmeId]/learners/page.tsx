@@ -63,6 +63,31 @@ export default async function ProgrammeLearnersPage({
   const unjudged = report?.result.students.filter((s) => s.category === null && s.totalScore !== null).length ?? 0;
   const nothingRecorded = report?.result.students.filter((s) => s.totalScore === null).length ?? 0;
 
+  /**
+   * How far each subject's rating sheet has been filled in, and the way
+   * back to it.
+   *
+   * This page is where a Head of Department discovers that half the
+   * cohort is awaiting a judgement; it has to say WHICH subject is
+   * waiting, and let them go straight there. Counted over the criteria a
+   * person judges — the derived weightage needs nobody to enter it, so
+   * including it would report every subject as part-done before anyone
+   * had touched it.
+   */
+  const judgedCriteria = report?.criteria.filter((c) => !c.derived) ?? [];
+  const subjectProgress = (report?.courses ?? []).map((course) => {
+    const scores = report?.courseScores[course.id] ?? {};
+    const students = Object.keys(scores).length;
+    let entered = 0;
+    for (const row of Object.values(scores)) {
+      for (const criterion of judgedCriteria) {
+        const value = row[criterion.id];
+        if (value !== null && value !== undefined) entered += 1;
+      }
+    }
+    return { course, students, entered, expected: students * judgedCriteria.length };
+  });
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-baseline gap-3">
@@ -180,8 +205,7 @@ export default async function ProgrammeLearnersPage({
           ) : (
             <>
               <p className="text-xs text-gray-600">
-                {report.batch.name} · semester {report.semester} · {report.courses.length} subject(s):{' '}
-                {report.courses.map((c) => c.code).join(', ') || '—'}
+                {report.batch.name} · semester {report.semester} · {report.courses.length} subject(s)
               </p>
 
               {canConfigure ? (
@@ -265,6 +289,62 @@ export default async function ProgrammeLearnersPage({
                   mostly slow learners.
                 </p>
               </section>
+
+              {/*
+                ── the way back to the rating sheets ──
+
+                The counts above are where an outstanding sheet is
+                noticed; this is where it is dealt with. Ratings are
+                entered per subject, by the person who taught it, so a
+                page reporting that half the cohort awaits a judgement has
+                to say which subject is waiting and lead there directly.
+              */}
+              {subjectProgress.length > 0 ? (
+                <section className="space-y-1">
+                  <h3 className="font-medium text-sm">Where the ratings stand</h3>
+                  <table className="bg-white border-collapse text-sm">
+                    <thead>
+                      <tr className="bg-gray-100 text-left">
+                        <th className="border border-gray-300 px-2 py-1 w-32">Subject</th>
+                        <th className="border border-gray-300 px-2 py-1">Title</th>
+                        <th className="border border-gray-300 px-2 py-1 text-right w-24">Students</th>
+                        <th className="border border-gray-300 px-2 py-1 text-right w-36">Judgements</th>
+                        {canSeeNames ? <th className="border border-gray-300 px-2 py-1 w-36"></th> : null}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {subjectProgress.map(({ course, students, entered, expected }) => {
+                        const done = expected > 0 && entered === expected;
+                        return (
+                          <tr key={course.id} className={done ? '' : 'bg-amber-50'}>
+                            <td className="border border-gray-300 px-2 py-1 font-mono">{course.code}</td>
+                            <td className="border border-gray-300 px-2 py-1">{course.title}</td>
+                            <td className="border border-gray-300 px-2 py-1 text-right tabular-nums">{students}</td>
+                            <td className="border border-gray-300 px-2 py-1 text-right tabular-nums">
+                              {expected === 0 ? '—' : `${entered} of ${expected}`}
+                              {done ? <span className="text-green-800"> ✓</span> : null}
+                            </td>
+                            {canSeeNames ? (
+                              <td className="border border-gray-300 px-2 py-1">
+                                <Link
+                                  href={`/courses/${course.id}/learners`}
+                                  className="text-blue-700 hover:underline"
+                                >
+                                  {entered === 0 ? 'Enter ratings' : done ? 'Review ratings' : 'Finish ratings'} →
+                                </Link>
+                              </td>
+                            ) : null}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  <p className="text-xs text-gray-500">
+                    Counted over the criteria a teacher judges. The mark-derived one needs nobody to enter it, so it is
+                    left out — otherwise every subject would read as part-done before anyone had opened it.
+                  </p>
+                </section>
+              ) : null}
 
               {/* ── the roll: names, so department chain only ── */}
               {canSeeNames ? (

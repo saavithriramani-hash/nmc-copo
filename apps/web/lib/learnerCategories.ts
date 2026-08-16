@@ -151,7 +151,7 @@ export async function derivedWeightage(courseIds: string[], maxScore: number): P
 // ── one course's rating sheet ─────────────────────────────────────────────
 
 export interface CourseRatingSheet {
-  course: { id: string; code: string; title: string; semester: number; programmeId: string };
+  course: { id: string; code: string; title: string; semester: number; programmeId: string; batchId: string };
   criteria: CriterionRow[];
   students: { enrolmentId: string; registerNumber: string; fullName: string }[];
   /** enrolmentId → criterionId → score. Absent = not rated. */
@@ -170,7 +170,7 @@ export async function courseRatingSheet(courseId: string): Promise<CourseRatingS
       code: true,
       title: true,
       semester: true,
-      batch: { select: { programmeId: true } },
+      batch: { select: { id: true, programmeId: true } },
     },
   });
   if (!course) return null;
@@ -206,7 +206,7 @@ export async function courseRatingSheet(courseId: string): Promise<CourseRatingS
   });
 
   return {
-    course: { ...course, programmeId },
+    course: { ...course, programmeId, batchId: course.batch.id },
     criteria,
     students: enrolments.map((e) => ({
       enrolmentId: e.id,
@@ -319,10 +319,24 @@ export async function learnerCategoryReport(
       : Promise.resolve<DerivedWeightage>({ byEnrolment: {}, coursesWithoutMarks: [], overMaximum: [] }),
   ]);
 
+  const maxByCriterion = new Map(criteria.map((c) => [c.id, c.maxScore]));
   const ratingByEnrolment = new Map<string, Record<string, number | null>>();
+  // A rating above its criterion's maximum makes the engine throw, by
+  // design — it is a contract violation, not a figure. The write path
+  // refuses to create one, but a maximum lowered before that check
+  // existed, or a hand-edited row, must not take the whole report down.
+  // Excluded and named, exactly as CR-7 handles a question tagged outside
+  // its taxonomy.
+  const outOfRange: string[] = [];
   for (const r of ratings) {
+    const score = r.score === null ? null : Number(r.score);
+    const max = maxByCriterion.get(r.criterionId);
+    if (score !== null && max !== undefined && score > max) {
+      outOfRange.push(r.criterionId);
+      continue;
+    }
     const row = ratingByEnrolment.get(r.enrolmentId) ?? {};
-    row[r.criterionId] = r.score === null ? null : Number(r.score);
+    row[r.criterionId] = score;
     ratingByEnrolment.set(r.enrolmentId, row);
   }
 
@@ -360,6 +374,18 @@ export async function learnerCategoryReport(
     studentIds: roster.map((r) => r.id),
     bands: applied.bands,
   });
+
+  if (outOfRange.length > 0) {
+    const names = [...new Set(outOfRange)]
+      .map((id) => criteria.find((c) => c.id === id)?.label ?? id)
+      .join(', ');
+    result.warnings.push({
+      code: 'LC_PARTIALLY_RATED',
+      severity: 'warning',
+      message: `${outOfRange.length} rating(s) exceed the maximum now set for their criterion (${names}) and are excluded. This happens when a criterion's maximum is lowered after ratings were entered against it; correct those ratings, or raise the maximum back.`,
+      ref: {},
+    });
+  }
 
   // Marks that exceed the paper total are a fault in the ledger, not a
   // property of the cohort, so the engine cannot know about them.
