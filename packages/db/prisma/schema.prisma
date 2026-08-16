@@ -98,6 +98,10 @@ model Institution {
   targetAttainment      Decimal @db.Decimal(4, 2)
   feedbackResponseFloor Int
 
+  /// CR-8: institution-wide slow/advanced learner bands. Nullable, and so
+  /// unlike every parameter above it — see Programme.learnerBands.
+  learnerBands Json?
+
   departments Department[]
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
@@ -164,10 +168,62 @@ model Programme {
   targetAttainment      Decimal? @db.Decimal(4, 2)
   feedbackResponseFloor Int?
 
-  outcomes ProgrammeOutcome[]
-  batches  Batch[]
+  /// CR-8: the slow/advanced learner bands, in the engine's
+  /// CategoryBandRow shape. Null = the engine's DEFAULT_CATEGORY_BANDS.
+  /// Nullable at every level, unlike the attainment parameters above,
+  /// because this is a standalone NAAC 2.2.1 report rather than part of
+  /// the ten steps: a college that never opens it should not be made to
+  /// configure it. Whichever table was applied is printed on the report.
+  learnerBands Json?
+
+  outcomes        ProgrammeOutcome[]
+  batches         Batch[]
+  learnerCriteria LearnerCriterion[]
 
   @@unique([departmentId, name])
+}
+
+/// CR-8: one thing students are rated on for the slow/advanced learner
+/// report (NAAC 2.2.1) — "Interaction with teachers", "Seminar", and so on.
+///
+/// Held per PROGRAMME rather than built in, because the five the
+/// Mathematics department uses are its own and thirty programmes will not
+/// agree on them. `DEFAULT_LEARNER_CRITERIA` in the engine offers those
+/// five as a starting point; nothing forces them.
+model LearnerCriterion {
+  id           String    @id @default(cuid())
+  programmeId  String
+  programme    Programme @relation(fields: [programmeId], references: [id], onDelete: Restrict)
+  label        String
+  maxScore     Decimal   @db.Decimal(6, 2)
+  /// True for the workbook's "Weightage (20) CIA & semester": derived from
+  /// the mark ledger, not judged by a teacher. A derived criterion carries
+  /// NO LearnerRating rows — its value is computed on demand like every
+  /// other derived value in this system (§9, nothing derived is stored).
+  derived      Boolean   @default(false)
+  displayOrder Int
+
+  ratings LearnerRating[]
+
+  @@unique([programmeId, label])
+  @@index([programmeId])
+}
+
+/// CR-8: one teacher's judgement of one student on one criterion, in one
+/// course. `score` null = not yet rated, and that is NOT zero: an unrated
+/// criterion leaves both the numerator and the divisor (see
+/// learnerCategories.ts), so a sheet half filled in cannot push a student
+/// towards "slow learner".
+model LearnerRating {
+  enrolmentId String
+  criterionId String
+  enrolment   Enrolment        @relation(fields: [enrolmentId], references: [id], onDelete: Restrict)
+  criterion   LearnerCriterion @relation(fields: [criterionId], references: [id], onDelete: Restrict)
+  score       Decimal?         @db.Decimal(6, 2)
+  updatedAt   DateTime         @updatedAt
+
+  @@id([enrolmentId, criterionId])
+  @@index([criterionId])
 }
 
 /// A PO or PSO definition. Each programme owns its full set (§3 / FR-2).
@@ -340,7 +396,8 @@ model Enrolment {
   course        Course      @relation(fields: [courseId, batchId], references: [id, batchId], onDelete: Restrict)
   rosterEntry   BatchRoster @relation(fields: [rosterEntryId, batchId], references: [id, batchId], onDelete: Restrict)
 
-  markValues MarkValue[]
+  markValues     MarkValue[]
+  learnerRatings LearnerRating[]
 
   @@unique([courseId, rosterEntryId]) // one enrolment per student per course
   @@unique([id, courseId]) // composite-FK target: pins a mark's enrolment to a course

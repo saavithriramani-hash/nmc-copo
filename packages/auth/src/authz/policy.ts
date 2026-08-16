@@ -63,6 +63,7 @@ export function decide(actor: ActorContext, action: Action, resource: ResourceCo
     case 'matrix.write':
     case 'marks.read':
     case 'marks.write':
+    case 'learners.rate':
     case 'course.submit':
     case 'course.lock':
     case 'course.return':
@@ -81,6 +82,17 @@ export function decide(actor: ActorContext, action: Action, resource: ResourceCo
       if (has(actor, 'PRINCIPAL')) return allow('PRINCIPAL');
       return deny('OUT_OF_SCOPE');
     }
+    case 'learners.read': {
+      // CR-8: the roll that NAMES students as slow learners. NFR-10 in
+      // spirit rather than by letter — these are not marks, but a list
+      // labelling identifiable students by learning ability is at least
+      // as sensitive as one, so it stops at the department chain. The
+      // Dean, IQAC and Principal keep the counts and the distribution
+      // under programme.read, which carries no names.
+      if (resource?.kind !== 'programme') return deny('RESOURCE_NOT_FOUND');
+      return isHodOf(actor, resource.departmentId) ? allow('HOD') : deny('OUT_OF_SCOPE');
+    }
+    case 'learners.configure':
     case 'programme.manage':
     case 'settings.programme.write': {
       // PO/PSO definitions (FR-2) and programme-level parameter overrides
@@ -207,6 +219,27 @@ function decideCourse(
       if (own) return allow('FACULTY(own course)');
       if (hod) return allow('HOD');
       if (has(actor, 'COE')) return allow('COE');
+      return deny('OUT_OF_SCOPE');
+    }
+
+    case 'learners.rate': {
+      // CR-8: the slow/advanced learner ratings.
+      //
+      // STATUS DOES NOT GATE THIS, and that is deliberate — it is the one
+      // course-scoped write in the system that a LOCKED course still
+      // allows. The lock exists to freeze attainment: it seals an
+      // immutable snapshot of the ten steps so an auditor can replay it.
+      // These ratings enter no snapshot, feed no CO or PO figure, and are
+      // read only by the standalone NAAC 2.2.1 report, so nothing a lock
+      // protects can move when one is written. Gating them would instead
+      // strand the department: attainment is locked at the end of the
+      // semester and the 2.2.1 return is prepared on its own calendar,
+      // months later, against courses long since locked.
+      //
+      // The people are the same as for marks, minus the COE: this is the
+      // teacher's own judgement of a student they taught.
+      if (own) return allow('FACULTY(own course)');
+      if (hod) return allow('HOD');
       return deny('OUT_OF_SCOPE');
     }
 

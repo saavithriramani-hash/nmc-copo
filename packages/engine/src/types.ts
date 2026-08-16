@@ -167,7 +167,17 @@ export type WarningCode =
   | 'KL_LEVEL_NOT_EXAMINED'    // the paper allots a level no marks
   | 'KL_STUDENT_ABSENT'        // attempted nothing; excluded from class figures
   | 'KL_MARKS_UNATTEMPTED'     // blanks stay in the denominator by this method
-  | 'KL_NO_STUDENTS_PRESENT';  // nobody attempted anything
+  | 'KL_NO_STUDENTS_PRESENT'   // nobody attempted anything
+  // ── slow and advanced learners (learnerCategories.ts) ──────────────
+  // Standalone in the same way, and for the same reason: computeCourse
+  // never emits these and no CO or PO figure reads them.
+  | 'LC_NO_CRITERIA'           // nothing configured to rate students on
+  | 'LC_COURSE_UNRATED'        // a subject in which nobody has been rated
+  | 'LC_STUDENT_UNRATED'       // nothing recorded anywhere; unclassified, never "slow"
+  | 'LC_NOT_JUDGED'            // marks only, no teacher judgement; unclassified
+  | 'LC_PARTIALLY_RATED'       // scored out of the criteria rated, not the full set
+  | 'LC_NOT_ENROLLED'          // a student of the batch taking nothing this semester
+  | 'LC_NO_MARKS';             // the derived weightage has no marks behind it
 
 /** Identifies the entity a warning refers to. Only the relevant ids are set. */
 export interface WarningRef {
@@ -177,6 +187,12 @@ export interface WarningRef {
   sectionId?: string;
   itemId?: string;
   groupId?: string;
+  /**
+   * Only ever set by learnerCategories.ts, which is the one computation
+   * here that spans several courses and so has to name which one. The ten
+   * steps run inside a single course and have no use for it.
+   */
+  courseId?: string;
 }
 
 export interface EngineWarning {

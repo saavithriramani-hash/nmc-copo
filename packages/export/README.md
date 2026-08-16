@@ -59,6 +59,43 @@ no cached result. Harmless — Excel recalculates it on open, verified by
 opening a generated file in Excel — but it is why the tests assert those
 cells through their formula rather than a cached value.
 
+## The slow and advanced learner workbook (CR-8)
+
+Another **separate** document, built by `buildLearnerCategoryWorkbook` —
+the college's NAAC 2.2.1 identification; see `@copo/engine`'s
+`computeLearnerCategories`.
+
+| Sheet | Contents |
+|---|---|
+| one per subject | Students down, criteria across, every cell a literal — the inputs the semester sheet's formulas bottom out at |
+| `Semester N` | Each criterion averaged across the subject sheets, the averages summed, the percentage taken, the category looked up. Every cell a formula, and the band table printed beneath them |
+| `Summary` | The counts and the engine's notes. **Names nobody**, so it is the sheet an accreditation return quotes |
+
+The layout is the filed workbook's; the arithmetic deliberately is not.
+Five things it does differently, each because the original is wrong there:
+
+- references are generated from **the student's own row** (`FinalSem1!I6`
+  is `=SUM(D10+…)`, shared to `I18`, so thirteen of seventeen students
+  display the score of the student four rows below);
+- the category is an `IF` chain built from the applied band table, where
+  the original types it by hand and gives 84.6 both "SL" and "AL";
+- every derived cell is a formula, where two rows of `FinalSem2` have
+  theirs overtyped with one subject's raw values;
+- rounding is a display format, where one cell alone carries
+  `ROUND(...,0)`;
+- **`AVERAGE`, never `SUM(a+b)/2`** — it skips blank and text cells, so a
+  subject not taken and a criterion not rated both leave the divisor,
+  exactly as the engine's `ratedIn` does.
+
+One thing here was found only by opening a generated file in Excel, and no
+assertion on cached values could have caught it. The category is a live
+formula, so **Excel recalculates it on open** — and because the
+mark-derived criterion always has a value, the percentage always exists,
+so the band chain cheerfully labelled "Average" a student the engine had
+refused to classify. The file disagreed with the application the moment
+anybody opened it. The fix is a visible `Judged on` column counting the
+criteria a *person* has judged, with the category gated on it.
+
 ## The round-trip test
 
 `npm test` generates the workbook, writes it to a real `.xlsx` buffer,

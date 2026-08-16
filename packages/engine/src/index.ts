@@ -51,3 +51,21 @@ export {
   type StudentKnowledgeRow,
   type CohortLevelRow,
 } from './knowledgeLevels';
+
+/**
+ * Slow and advanced learners (NAAC 2.2.1) — standalone on the same terms
+ * as the knowledge levels above; see the header of learnerCategories.ts.
+ */
+export {
+  computeLearnerCategories,
+  DEFAULT_CATEGORY_BANDS,
+  DEFAULT_LEARNER_CRITERIA,
+  type LearnerCriterion,
+  type LearnerCourseRatings,
+  type CategoryBandRow,
+  type LearnerCategoryInput,
+  type LearnerCategoryResult,
+  type StudentCategoryRow,
+  type CriterionMeanRow,
+  type CategoryCountRow,
+} from './learnerCategories';

@@ -50,6 +50,28 @@ something else otherwise. Blank is still not zero: unattempted marks are
 counted and reported separately, a student who attempted nothing is
 *absent* rather than scoring nothing, and the class figures exclude them.
 
+## Slow and advanced learners (CR-8) — also not one of the steps
+
+`computeLearnerCategories` identifies slow and advanced learners for NAAC
+2.2.1: each subject rates a student on the programme's criteria, each
+criterion is averaged across the semester's subjects, the averages are
+summed, and a band table gives the category.
+
+Standalone on the same terms as `computeKnowledgeLevels` — `computeCourse`
+does not call it, no CO or PO figure reads it, and removing it would leave
+the ten steps byte-identical.
+
+Two rules here are worth knowing before reading the code:
+
+- **The divisor is the ratings that exist**, never the subjects taken. An
+  unrated criterion leaves the numerator *and* the divisor, and the
+  obtainable total shrinks with it, so a student rated on four of five
+  criteria is scored out of 80 rather than being punished for the fifth.
+- **A student no teacher has judged is not classified**, however good
+  their marks. The mark-derived criterion always has a value once marks
+  exist, so without this every unjudged student in the college would be
+  labelled from their mark percentage alone.
+
 ## Invariants enforced here
 
 - **Blank ≠ zero.** A blank mark is `null` — "did not attempt", excluded
@@ -81,7 +103,7 @@ never use them.
 
 ## Testing policy (NFR-7)
 
-`npm test` — vitest, 136 tests. All fixtures are **synthetic, with
+`npm test` — vitest, 176 tests. All fixtures are **synthetic, with
 expected values worked out by hand** before the assertions were written
 (the derivations are in the fixture/test comments — start with
 `tests/fixtures/e2eCourse.ts`). No real or sample course data is used as
@@ -95,6 +117,16 @@ statement of the **method** and never as an oracle for a number: its
 figures are re-derived from first principles here, and one test exists
 because the sheet's own `IF(x>79,"3",…)` awards level 3 to 79.5% while
 the table printed beside it says 60–79 → 2.
+
+The learner-category tests (CR-8) do the same, and end with a block named
+for the faults in the filed *Slow and Advanced Learners* workbook. The
+first of them matters beyond this repository: `FinalSem1!I6` is
+`=SUM(D10+…)` shared down to `I18`, so thirteen of seventeen students
+carry the score of the student four rows below, and the two highest
+scorers in the semester are recorded as slow learners. The regression
+test builds seventeen students with distinct scores and asserts each one
+is its own — a score is reachable only through the student's identity, so
+a row offset has nothing to offset.
 
 `npm run typecheck` — strict TypeScript with `noUncheckedIndexedAccess`
 and `exactOptionalPropertyTypes`.

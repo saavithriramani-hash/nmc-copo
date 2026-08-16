@@ -39,6 +39,9 @@ function fixtureCourse(overrides: CourseOverrides = {}): CourseForInput {
     indirectWeight: D('0.1'),
     targetAttainment: D('2.5'),
     feedbackResponseFloor: 0,
+    // CR-8: nullable at every level, and null here deliberately — the
+    // ten steps do not read it, so the adapter must not care.
+    learnerBands: null as Prisma.JsonValue,
     createdAt: NOW,
     updatedAt: NOW,
   };
@@ -68,6 +71,7 @@ function fixtureCourse(overrides: CourseOverrides = {}): CourseForInput {
         departmentId: 'dept-1',
         name: 'B.Sc. Mathematics',
         ...NULL_OVERRIDES,
+        learnerBands: null as Prisma.JsonValue,
         department: { id: 'dept-1', institutionId: 'inst', name: 'Mathematics', institution },
         outcomes: [
           { id: 'po1', programmeId: 'prog-1', code: 'PO1', kind: 'PO', statement: 'Knowledge', displayOrder: 1 },

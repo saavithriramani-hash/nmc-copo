@@ -17,3 +17,10 @@ export type { ExportInput, ExportCourseMeta, ExportRefs } from './types';
  * knowledge levels a paper examines, which is no part of the ten steps.
  */
 export { buildLearningOutcomeWorkbook, type LearningOutcomeInput } from './learningOutcome';
+
+/**
+ * The slow and advanced learner workbook (CR-8, NAAC 2.2.1) — likewise a
+ * separate document, laid out as the college's own: a sheet per subject
+ * and a semester sheet averaging across them.
+ */
+export { buildLearnerCategoryWorkbook, type LearnerWorkbookInput } from './learnerCategories';

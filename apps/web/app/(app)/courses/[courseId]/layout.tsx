@@ -49,6 +49,10 @@ export default async function CourseLayout({
     // CR-7. After Attainment, because it is a separate reading of the
     // same marks and not a step towards the attainment figures.
     { href: `/courses/${courseId}/learning-outcome`, label: 'Learning outcome' },
+    // CR-8. Beside it, and for the same reason: a separate reading of the
+    // cohort that feeds no attainment figure. The consolidated report
+    // lives on the programme, since it spans a semester's subjects.
+    { href: `/courses/${courseId}/learners`, label: 'Learners' },
     { href: `/courses/${courseId}/versions`, label: 'Versions' },
     { href: `/courses/${courseId}/settings`, label: 'Parameters' },
   ];

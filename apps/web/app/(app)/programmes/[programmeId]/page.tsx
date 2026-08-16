@@ -53,9 +53,16 @@ export default async function ProgrammePage({
             />
           ) : null}
         </div>
-        <Link href={`/programmes/${programme.id}/consolidation`} className="text-sm text-blue-700 hover:underline">
-          Programme consolidation →
-        </Link>
+        <div className="flex flex-col items-end gap-1">
+          <Link href={`/programmes/${programme.id}/consolidation`} className="text-sm text-blue-700 hover:underline">
+            Programme consolidation →
+          </Link>
+          {/* CR-8: a semester figure, so it belongs beside the consolidation
+              rather than on any one course. */}
+          <Link href={`/programmes/${programme.id}/learners`} className="text-sm text-blue-700 hover:underline">
+            Slow and advanced learners →
+          </Link>
+        </div>
       </div>
       {error ? <p className="text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">{error}</p> : null}
 

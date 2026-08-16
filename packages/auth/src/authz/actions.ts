@@ -22,6 +22,13 @@ export type CourseActionType =
   // practical examination, so both fall back to the course's own chain.
   | 'assessment.external.write' // create/edit an assessment in the external weight group
   | 'marks.external.write' // enter marks for one
+  // CR-8: the slow/advanced learner ratings for this course. Its own
+  // action rather than course.write, because it is a per-student judgement
+  // of a named individual — nearer to marks than to course setup — and
+  // because it stays open on a SUBMITTED course, which course.write does
+  // not: the NAAC 2.2.1 return is filed on its own calendar and must not
+  // be blocked by an attainment submission awaiting approval.
+  | 'learners.rate'
   | 'course.submit' // faculty → HoD (FR-16)
   | 'course.lock' // HoD approves and locks → immutable snapshot
   | 'course.return' // HoD sends a submission back, with the reason (FR-16)
@@ -32,7 +39,14 @@ export type CourseActionType =
 export type ProgrammeActionType =
   | 'programme.read' // programme attainment / consolidation
   | 'programme.manage' // PO/PSO definitions (FR-2)
-  | 'settings.programme.write'; // programme-level parameter override
+  | 'settings.programme.write' // programme-level parameter override
+  // CR-8: the consolidated slow/advanced learner roll, which NAMES the
+  // students classified as slow. Split from programme.read, which the
+  // Dean, IQAC and Principal hold: a roll of named individuals follows
+  // NFR-10 and stops at the department chain. The counts and the
+  // distribution carry no names and stay under programme.read.
+  | 'learners.read' // the named roll
+  | 'learners.configure'; // the criteria and the category bands
 
 /** Actions on one department. */
 export type DepartmentActionType =
@@ -74,6 +88,7 @@ export const COURSE_ACTION_TYPES: readonly CourseActionType[] = [
   'matrix.write',
   'marks.read',
   'marks.write',
+  'learners.rate',
   'course.submit',
   'course.return',
   'course.lock',

@@ -77,6 +77,25 @@ export function setFormula(
   return address(column, row, true);
 }
 
+/**
+ * The same, for a formula whose result is TEXT — a category name, a
+ * label. Separate from `setFormula` so a numeric cell can never be handed
+ * a string result by accident: the invariant that levels and scores are
+ * numbers, never text, is one of the spreadsheet faults this package
+ * exists to correct (§9).
+ */
+export function setFormulaText(
+  sheet: ExcelJS.Worksheet,
+  column: number,
+  row: number,
+  formula: string,
+  engineValue: string | null,
+): string {
+  const cell = sheet.getCell(row, column);
+  cell.value = { formula, result: engineValue === null ? undefined : engineValue } as ExcelJS.CellFormulaValue;
+  return address(column, row, true);
+}
+
 /** Writes a literal input value (a count, a strength, a parameter). */
 export function setValue(
   sheet: ExcelJS.Worksheet,

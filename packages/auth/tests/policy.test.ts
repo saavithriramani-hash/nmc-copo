@@ -508,6 +508,71 @@ describe('policy — course details are the catalogue (CR-3)', () => {
   });
 });
 
+describe('policy — slow and advanced learners (CR-8)', () => {
+  const rate = (courseId: string): Action => ({ type: 'learners.rate', courseId });
+  const roll = (programmeId: string): Action => ({ type: 'learners.read', programmeId });
+  const configure = (programmeId: string): Action => ({ type: 'learners.configure', programmeId });
+
+  it('lets faculty rate the students of their own course', () => {
+    expect(decide(facultyMath1, rate('c-math-1'), C_MATH_1).allow).toBe(true);
+  });
+
+  it("never lets faculty rate a colleague's students", () => {
+    expect(decide(facultyMath1, rate('c-math-2'), C_MATH_2)).toEqual({ allow: false, reason: 'OUT_OF_SCOPE' });
+    expect(decide(facultyMath1, rate('c-phys-1'), C_PHYS_1)).toEqual({ allow: false, reason: 'OUT_OF_SCOPE' });
+  });
+
+  it('lets the HoD rate anywhere in their department, and nowhere else', () => {
+    expect(decide(hodMath, rate('c-math-2'), C_MATH_2).allow).toBe(true);
+    expect(decide(hodMath, rate('c-phys-1'), C_PHYS_1).allow).toBe(false);
+  });
+
+  it('stays open on a SUBMITTED and even a LOCKED course, unlike every other course write', () => {
+    // Deliberate, and the one place the lock does not bite: these ratings
+    // enter no snapshot and feed no attainment figure, while the NAAC
+    // 2.2.1 return is prepared months after the attainment is locked.
+    for (const status of ['DRAFT', 'SUBMITTED', 'LOCKED'] as const) {
+      const c = course({ status });
+      expect(decide(facultyMath1, rate('c-math-1'), c).allow, status).toBe(true);
+      expect(decide(hodMath, rate('c-math-1'), c).allow, status).toBe(true);
+    }
+    // …while the writes the lock DOES protect are still refused, so this
+    // exception cannot be mistaken for the lock having stopped working.
+    const locked = course({ status: 'LOCKED' });
+    expect(decide(hodMath, courseAction('marks.write', 'c-math-1'), locked).allow).toBe(false);
+    expect(decide(hodMath, courseAction('course.write', 'c-math-1'), locked).allow).toBe(false);
+  });
+
+  it('keeps the named roll inside the department chain (NFR-10)', () => {
+    // A list labelling identifiable students by learning ability is at
+    // least as sensitive as their marks. The read-all roles do not get it.
+    expect(decide(hodMath, roll('prog-math'), PROG_MATH).allow).toBe(true);
+    for (const who of [dean, iqac, principal, coe, admin]) {
+      expect(decide(who, roll('prog-math'), PROG_MATH).allow, who.userId).toBe(false);
+    }
+    // …while the counts, which name nobody, stay readable by all of them.
+    for (const who of [dean, iqac, principal]) {
+      expect(decide(who, { type: 'programme.read', programmeId: 'prog-math' }, PROG_MATH).allow, who.userId).toBe(true);
+    }
+  });
+
+  it('denies the roll to an HoD of another department', () => {
+    expect(decide(hodMath, roll('prog-phys'), PROG_PHYS)).toEqual({ allow: false, reason: 'OUT_OF_SCOPE' });
+  });
+
+  it('gives the criteria and the bands to the HoD alone', () => {
+    expect(decide(hodMath, configure('prog-math'), PROG_MATH).allow).toBe(true);
+    expect(decide(hodMath, configure('prog-math-msc'), PROG_MATH_MSC).allow).toBe(true);
+    for (const who of [facultyMath1, dean, iqac, principal, coe, admin]) {
+      expect(decide(who, configure('prog-math'), PROG_MATH).allow, who.userId).toBe(false);
+    }
+  });
+
+  it('denies a rating on a course that does not exist', () => {
+    expect(decide(hodMath, rate('c-ghost'), null)).toEqual({ allow: false, reason: 'RESOURCE_NOT_FOUND' });
+  });
+});
+
 describe('policy — cross-cutting', () => {
   it('an inactive account is denied everything, whatever its roles', () => {
     const inactiveHod = actor('hod-math', hodMath.roles, false);
