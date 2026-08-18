@@ -85,6 +85,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       </header>
       <main className="flex-1 p-4 max-w-6xl w-full mx-auto">{children}</main>
+      {/*
+        The credit, once, at the foot of the shell — so it is present on
+        every page and in the way on none. `mt-auto` is already satisfied
+        by `flex-1` on <main>, which pins this to the bottom of a short
+        page without floating it over a long one.
+      */}
+      <footer className="px-4 py-2 text-xs text-gray-500 max-w-6xl w-full mx-auto">
+        Nehru Memorial College (Autonomous), Puthanampatti · Developed by Dr. V. Saavithri
+      </footer>
     </div>
   );
 }
