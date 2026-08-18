@@ -31,7 +31,11 @@ export function Letterhead() {
     <img
       src="/nmc-letterhead.png"
       alt="Nehru Memorial College (Autonomous), Puthanampatti — nationally reaccredited with A+ grade by NAAC"
-      className="w-full max-w-xl h-auto"
+      // `max-w-full`, deliberately NOT `w-full`: the banner renders at its
+      // own size and is only ever scaled DOWN to fit. Filling the width
+      // would upscale a small export — the file installed today is 389px
+      // across — and a blurred crest is worse than a smaller sharp one.
+      className="max-w-full h-auto"
       onError={() => setFailed(true)}
     />
   );
