@@ -210,16 +210,25 @@ model LearnerCriterion {
 }
 
 /// CR-8: one teacher's judgement of one student on one criterion, in one
-/// course. `score` null = not yet rated, and that is NOT zero: an unrated
-/// criterion leaves both the numerator and the divisor (see
-/// learnerCategories.ts), so a sheet half filled in cannot push a student
-/// towards "slow learner".
+/// course.
+///
+/// A ROW MEANS A JUDGEMENT THAT EXISTS. "Not rated" is the absence of a
+/// row, never a row holding nothing — clearing a cell deletes it. The
+/// engine has always read a null score and an absent key as the same
+/// fact, so allowing both made one fact representable two ways; and
+/// anything counting rows then counted a blank as a rating, which left a
+/// criterion somebody had typed into and cleared permanently undeletable.
+///
+/// Blank is still not zero: an unrated criterion leaves both the
+/// numerator and the divisor (see learnerCategories.ts), so a sheet half
+/// filled in cannot push a student towards "slow learner". That is what
+/// the MISSING ROW means; a stored zero is a real judgement of nothing.
 model LearnerRating {
   enrolmentId String
   criterionId String
   enrolment   Enrolment        @relation(fields: [enrolmentId], references: [id], onDelete: Restrict)
   criterion   LearnerCriterion @relation(fields: [criterionId], references: [id], onDelete: Restrict)
-  score       Decimal?         @db.Decimal(6, 2)
+  score       Decimal          @db.Decimal(6, 2)
   updatedAt   DateTime         @updatedAt
 
   @@id([enrolmentId, criterionId])

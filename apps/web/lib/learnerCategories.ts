@@ -190,9 +190,12 @@ export async function courseRatingSheet(courseId: string): Promise<CourseRatingS
     }),
   ]);
 
+  // A row IS a judgement — `score` is NOT NULL — so an unrated cell is
+  // simply a key that is not here, which is what the grid renders blank
+  // and what the engine reads as "not rated".
   const scores: Record<string, Record<string, number | null>> = {};
   for (const r of ratings) {
-    (scores[r.enrolmentId] ??= {})[r.criterionId] = r.score === null ? null : Number(r.score);
+    (scores[r.enrolmentId] ??= {})[r.criterionId] = Number(r.score);
   }
 
   const derivedCriterion = criteria.find((c) => c.derived);
@@ -329,9 +332,9 @@ export async function learnerCategoryReport(
   // its taxonomy.
   const outOfRange: string[] = [];
   for (const r of ratings) {
-    const score = r.score === null ? null : Number(r.score);
+    const score = Number(r.score);
     const max = maxByCriterion.get(r.criterionId);
-    if (score !== null && max !== undefined && score > max) {
+    if (max !== undefined && score > max) {
       outOfRange.push(r.criterionId);
       continue;
     }

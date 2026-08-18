@@ -78,9 +78,29 @@ export async function saveLearnerRatingsAction(
     valid.push(rating);
   }
 
+  // A cleared cell DELETES its row rather than storing a null.
+  //
+  // "Not rated" and "no row" are the same fact everywhere that reads
+  // this — the engine treats a null score and an absent key identically,
+  // and says so. Storing the null as well gave the table a third state
+  // that means nothing, and it was not harmless: a row with no value
+  // still counts as a rating, so typing a figure into a criterion and
+  // then clearing it left that criterion permanently undeletable. The
+  // table now holds judgements that exist, and nothing else.
+  const cleared = valid.filter((r) => r.score === null);
+  const entered = valid.filter((r): r is RatingInput & { score: number } => r.score !== null);
   if (valid.length > 0) {
-    await prisma.$transaction(
-      valid.map((rating) =>
+    await prisma.$transaction([
+      ...(cleared.length > 0
+        ? [
+            prisma.learnerRating.deleteMany({
+              where: {
+                OR: cleared.map((r) => ({ enrolmentId: r.enrolmentId, criterionId: r.criterionId })),
+              },
+            }),
+          ]
+        : []),
+      ...entered.map((rating) =>
         prisma.learnerRating.upsert({
           where: {
             enrolmentId_criterionId: { enrolmentId: rating.enrolmentId, criterionId: rating.criterionId },
@@ -89,7 +109,7 @@ export async function saveLearnerRatingsAction(
           update: { score: rating.score },
         }),
       ),
-    );
+    ]);
   }
 
   // Not audit-logged per cell, for the same reason mark entry is not:
@@ -144,15 +164,34 @@ export async function saveLearnerCriteriaAction(
 
   const existing = await prisma.learnerCriterion.findMany({
     where: { programmeId },
-    select: { id: true, label: true, _count: { select: { ratings: true } } },
+    select: { id: true, label: true },
   });
   const keep = new Set(cleaned.map((c) => c.id).filter(Boolean) as string[]);
   const doomed = existing.filter((e) => !keep.has(e.id));
-  const rated = doomed.filter((e) => e._count.ratings > 0);
-  if (rated.length > 0) {
+
+  // Every row here is a judgement that exists — `score` is NOT NULL and a
+  // cleared cell deletes its row — so counting rows is now the same as
+  // counting judgements. It was not always: a blank once stored as a row
+  // made a criterion somebody had typed into and cleared permanently
+  // undeletable, reported on screen as a rating nobody had made.
+  const judged =
+    doomed.length > 0
+      ? await prisma.learnerRating.groupBy({
+          by: ['criterionId'],
+          where: { criterionId: { in: doomed.map((d) => d.id) } },
+          _count: true,
+        })
+      : [];
+  if (judged.length > 0) {
+    const names = judged
+      .map((j) => {
+        const criterion = doomed.find((d) => d.id === j.criterionId);
+        return `“${criterion?.label ?? j.criterionId}” (${j._count})`;
+      })
+      .join(', ');
     return {
       ok: false,
-      error: `${rated.length} criterion/criteria already carry ratings and cannot be removed. Clear their ratings first if you really mean to drop them.`,
+      error: `${names} already carries ratings and cannot be removed. Clear those ratings on the subject sheets first if you really mean to drop it.`,
     };
   }
 
@@ -182,6 +221,12 @@ export async function saveLearnerCriteriaAction(
 
   await prisma.$transaction(async (tx) => {
     if (doomed.length > 0) {
+      // The blank rows first: the foreign key is ON DELETE RESTRICT, so a
+      // criterion still carrying an empty rating row cannot be removed
+      // and the whole save would fail with a constraint error nobody
+      // could act on. Only blanks can be here — anything holding a value
+      // was refused above.
+      await tx.learnerRating.deleteMany({ where: { criterionId: { in: doomed.map((d) => d.id) } } });
       await tx.learnerCriterion.deleteMany({ where: { id: { in: doomed.map((d) => d.id) } } });
     }
     for (const [index, c] of cleaned.entries()) {

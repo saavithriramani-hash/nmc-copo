@@ -58,11 +58,16 @@ export default async function ProgrammeLearnersPage({
       ? await learnerCategoryReport(programmeId, chosenBatch.batch.id, chosenSemester)
       : null;
 
-  const ratingCounts = await prisma.learnerCriterion.findMany({
-    where: { programmeId },
-    select: { id: true, _count: { select: { ratings: true } } },
+  // A row is a judgement: `score` is NOT NULL and clearing a cell deletes
+  // the row, so this count is what it says. Before that, a blank stored
+  // as a row was counted here too — overstating how much had been entered
+  // and greying out Remove on a criterion nobody had actually rated.
+  const ratingCounts = await prisma.learnerRating.groupBy({
+    by: ['criterionId'],
+    where: { criterion: { programmeId } },
+    _count: true,
   });
-  const ratingsById = new Map(ratingCounts.map((r) => [r.id, r._count.ratings]));
+  const ratingsById = new Map(ratingCounts.map((r) => [r.criterionId, r._count]));
 
   const fmt = (value: number | null, digits = 1) => (value === null ? '—' : value.toFixed(digits));
 
