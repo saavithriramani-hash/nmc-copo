@@ -111,6 +111,16 @@ export default function LoginPage() {
             <br />
             Forgotten your password? Ask the administrator for a reset.
           </p>
+
+          {/*
+            The development credit, and the only place it appears. The
+            sign-in page is the one screen with room for it: every screen
+            behind it is a working surface where a standing line of chrome
+            would take space a table wants.
+          */}
+          <p className="text-xs text-gray-500 mt-6 text-center">
+            Developed by the Curriculum Development Cell
+          </p>
         </section>
       </div>
     </main>

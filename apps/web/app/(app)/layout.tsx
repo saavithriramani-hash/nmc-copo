@@ -84,16 +84,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </form>
         </div>
       </header>
-      <main className="flex-1 p-4 max-w-6xl w-full mx-auto">{children}</main>
       {/*
-        The credit, once, at the foot of the shell — so it is present on
-        every page and in the way on none. `mt-auto` is already satisfied
-        by `flex-1` on <main>, which pins this to the bottom of a short
-        page without floating it over a long one.
+        No footer. The development credit lives on the sign-in page and
+        nowhere else: every screen inside is a working surface, and a
+        standing line at the foot of each one is a line of chrome on a
+        page that would rather give the space to a table.
       */}
-      <footer className="px-4 py-2 text-xs text-gray-500 max-w-6xl w-full mx-auto">
-        Nehru Memorial College (Autonomous), Puthanampatti · Developed by the Curriculum Development Cell
-      </footer>
+      <main className="flex-1 p-4 max-w-6xl w-full mx-auto">{children}</main>
     </div>
   );
 }
