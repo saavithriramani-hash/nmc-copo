@@ -8,40 +8,33 @@ import { Letterhead } from '@/components/Letterhead';
 /**
  * Sign in.
  *
- * A two-pane card on a dark ground: the college on the left, the form on
- * the right. Three things the reference design carries are deliberately
- * NOT here, because each would advertise something this application does
- * not do:
+ * Two panes — the college on the left, the form on the right — but in the
+ * application's own palette, not a design of its own: the page ground is
+ * the `bg-gray-50` every other screen sits on, the card is the same white
+ * on `border-gray-300` as every panel inside, and the button is the
+ * shared blue-700 primary rather than a dark pill. Somebody signing in
+ * should not arrive somewhere that looks like a different product.
  *
- *  - "Log in with Google". SSO is Phase 3 (§ roles and auth). Local
- *    accounts sit behind an interface designed for it, but the button
- *    would do nothing today.
- *  - "Remember for 30 days". There is no such setting; a checkbox that
- *    changes no behaviour is worse than none.
- *  - "Sign Up". Accounts are created by the system administrator — that
- *    is the access-control model, not an omission.
+ * Three things a conventional sign-in page carries are deliberately
+ * absent, because each would advertise something this application does
+ * not do: "Log in with Google" (SSO is Phase 3), "Remember for 30 days"
+ * (no such setting), and "Sign Up" (accounts are created by the system
+ * administrator — the access-control model, not a gap).
  *
- * The password reveal IS here: it needs no backend, and it is the one
- * control that saves a mistyped password on a screen where the mistake
- * costs a locked-out user a telephone call.
+ * The password reveal IS here: it needs no backend, and it catches a
+ * mistyped password on the one screen where the mistake costs a
+ * locked-out user a telephone call.
  */
 export default function LoginPage() {
   const [state, formAction, pending] = useActionState(loginAction, null);
   const [revealed, setRevealed] = useState(false);
 
   return (
-    <main className="min-h-screen bg-slate-900 flex items-center justify-center p-4 sm:p-8">
-      <div className="w-full max-w-5xl bg-white rounded-2xl shadow-2xl overflow-hidden grid md:grid-cols-2">
+    <main className="min-h-screen flex items-center justify-center p-4 sm:p-8">
+      <div className="w-full max-w-4xl bg-white border border-gray-300 rounded overflow-hidden grid md:grid-cols-2">
         {/* ── the college ── */}
-        <aside className="bg-gray-100 p-8 lg:p-10 flex flex-col justify-between gap-10">
-          {/*
-            On a white card of its own. The banner is stationery artwork
-            with its own white ground baked in, so on a grey pane it read
-            as a pasted-on rectangle; sitting it deliberately on white
-            makes that edge intentional. The typographic fallback takes
-            the same card and looks equally at home.
-          */}
-          <div className="bg-white rounded-lg p-4 shadow-sm flex justify-center">
+        <aside className="bg-gray-100 border-b md:border-b-0 md:border-r border-gray-300 p-8 flex flex-col items-center justify-center gap-8">
+          <div className="bg-white border border-gray-300 rounded p-4 flex justify-center">
             <Letterhead />
           </div>
           {/*
@@ -49,45 +42,38 @@ export default function LoginPage() {
             for, and a decorative panel that pushes it below the fold is
             an obstacle.
           */}
-          <AttainmentMotif className="hidden md:block w-full max-w-xs mx-auto h-auto" />
-          <p className="text-xs text-gray-600 leading-relaxed">
-            Course and programme outcome attainment, computed from question-wise marks by the college&apos;s own
-            ten-step procedure — for NAAC and NBA filing.
-          </p>
+          <AttainmentMotif className="hidden md:block w-full max-w-[16rem] h-auto" />
         </aside>
 
         {/* ── the form ── */}
-        <section className="p-8 lg:p-12 flex flex-col justify-center">
+        <section className="p-8 lg:p-10 flex flex-col justify-center">
           <div className="text-center">
-            <h1 className="text-3xl font-bold tracking-tight text-gray-900">Welcome back</h1>
+            <h1 className="text-2xl font-semibold text-gray-900">Welcome back</h1>
             <p className="text-sm text-gray-600 mt-1">Please enter your details</p>
           </div>
 
-          <form action={formAction} className="mt-8 space-y-6">
+          <form action={formAction} className="mt-8 space-y-4">
             <label className="block">
-              <span className="block text-xs font-medium text-gray-700">Email address</span>
+              <span className="block text-xs font-medium text-gray-700 mb-1">Email address</span>
               <input
                 name="email"
                 type="email"
                 autoComplete="username"
                 required
                 autoFocus
-                // Underlined rather than boxed, following the reference.
-                // `bg-transparent` so the field cannot read as a filled
-                // box on the white pane.
-                className="w-full border-0 border-b border-gray-300 bg-transparent px-0 py-2 text-base focus:border-blue-700 focus:ring-0"
+                className="w-full border border-gray-300 rounded px-2 py-1.5"
               />
             </label>
 
             <label className="block">
-              <span className="block text-xs font-medium text-gray-700">Password</span>
+              <span className="block text-xs font-medium text-gray-700 mb-1">Password</span>
               <span className="relative block">
                 <input
                   name="password"
                   type={revealed ? 'text' : 'password'}
                   autoComplete="current-password"
                   required
-                  className="w-full border-0 border-b border-gray-300 bg-transparent px-0 py-2 pr-10 text-base focus:border-blue-700 focus:ring-0"
+                  className="w-full border border-gray-300 rounded px-2 py-1.5 pr-9"
                 />
                 <button
                   type="button"
@@ -97,7 +83,7 @@ export default function LoginPage() {
                   // on, whereas "show password" can.
                   aria-label={revealed ? 'Hide password' : 'Show password'}
                   aria-pressed={revealed}
-                  className="absolute right-0 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-gray-800 rounded"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-gray-800 rounded"
                 >
                   <EyeIcon crossed={revealed} />
                 </button>
@@ -110,22 +96,21 @@ export default function LoginPage() {
               </p>
             ) : null}
 
+            {/* The shared primary button, to the letter — see any other form. */}
             <button
               type="submit"
               disabled={pending}
-              className="w-full bg-gray-900 text-white rounded-full py-3 font-medium hover:bg-gray-800 disabled:opacity-50"
+              className="w-full bg-blue-700 text-white rounded py-1.5 font-medium hover:bg-blue-800 disabled:opacity-50"
             >
-              {pending ? 'Signing in…' : 'Log in'}
+              {pending ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
 
-          <p className="text-xs text-gray-500 mt-8 text-center leading-relaxed">
+          <p className="text-xs text-gray-500 mt-6 text-center leading-relaxed">
             Accounts are created by the system administrator.
             <br />
             Forgotten your password? Ask the administrator for a reset.
           </p>
-
-          <p className="text-xs text-gray-400 mt-8 text-center">Developed by Dr. V. Saavithri</p>
         </section>
       </div>
     </main>
@@ -136,8 +121,8 @@ export default function LoginPage() {
 function EyeIcon({ crossed }: { crossed: boolean }) {
   return (
     <svg
-      width="20"
-      height="20"
+      width="18"
+      height="18"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
