@@ -92,7 +92,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         page without floating it over a long one.
       */}
       <footer className="px-4 py-2 text-xs text-gray-500 max-w-6xl w-full mx-auto">
-        Nehru Memorial College (Autonomous), Puthanampatti · Developed by Dr. V. Saavithri
+        Nehru Memorial College (Autonomous), Puthanampatti · Developed by the Curriculum Development Cell
       </footer>
     </div>
   );
