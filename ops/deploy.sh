@@ -32,6 +32,14 @@ fi
 if ! grep -q '^BOOTSTRAP_TOKEN=' .env; then
   echo "BOOTSTRAP_TOKEN=$(head -c 24 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 32)" >> .env
 fi
+# The published port comes from .env, which docker compose reads — but
+# this shell does not. Without this, ${APP_PORT} below was the
+# SHELL's value, so a deployment published on 3001 was health-checked on
+# 3000: a good upgrade reported as a failure, or worse, a different
+# application answering on 3000 reported as a good upgrade.
+APP_PORT="$(sed -n 's/^APP_PORT=[^0-9]*\([0-9][0-9]*\).*/\1/p' .env | tail -n1)"
+APP_PORT="${APP_PORT}"
+
 BOOTSTRAP_TOKEN="$(grep '^BOOTSTRAP_TOKEN=' .env | cut -d= -f2-)"
 
 # Build, or pull — whichever this compose file calls for.
@@ -59,18 +67,18 @@ docker compose up -d app backup
 
 echo "[deploy] waiting for the application to become healthy..."
 for _ in $(seq 1 30); do
-  if curl -fsS "http://localhost:${APP_PORT:-3000}/api/health" >/dev/null 2>&1; then break; fi
+  if curl -fsS "http://localhost:${APP_PORT}/api/health" >/dev/null 2>&1; then break; fi
   sleep 3
 done
 
 echo
-echo "[deploy] the application is running at http://localhost:${APP_PORT:-3000}"
+echo "[deploy] the application is running at http://localhost:${APP_PORT}"
 echo "[deploy] creating the first administrator account..."
 echo
 read -r -p "  Administrator email: " ADMIN_EMAIL
 read -r -p "  Administrator full name: " ADMIN_NAME
 
-RESPONSE="$(curl -fsS -X POST "http://localhost:${APP_PORT:-3000}/api/bootstrap/admin" \
+RESPONSE="$(curl -fsS -X POST "http://localhost:${APP_PORT}/api/bootstrap/admin" \
   -H 'Content-Type: application/json' \
   -H "x-bootstrap-token: ${BOOTSTRAP_TOKEN}" \
   -d "{\"email\":\"${ADMIN_EMAIL}\",\"fullName\":\"${ADMIN_NAME}\"}")" || {
@@ -85,5 +93,5 @@ echo "  Administrator created: ${ADMIN_EMAIL}"
 echo "  Temporary password (shown once): ${TEMP_PW}"
 echo "  You must change it at first login."
 echo
-echo "[deploy] done. Sign in at http://localhost:${APP_PORT:-3000}"
+echo "[deploy] done. Sign in at http://localhost:${APP_PORT}"
 echo "[deploy] check system health at /admin/health once signed in."
