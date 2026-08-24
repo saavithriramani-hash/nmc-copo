@@ -34,8 +34,20 @@ if ! grep -q '^BOOTSTRAP_TOKEN=' .env; then
 fi
 BOOTSTRAP_TOKEN="$(grep '^BOOTSTRAP_TOKEN=' .env | cut -d= -f2-)"
 
-echo "[deploy] building the application image (this takes a few minutes the first time)..."
-docker compose build
+# Build, or pull — whichever this compose file calls for.
+#
+# docker-compose.yml builds the application from source; the .prod.yml
+# variant pulls a published image instead, for a server with too little
+# memory to compile it (the build wants about 4 GB). Deciding from the
+# RESOLVED configuration rather than a filename means COMPOSE_FILE, an
+# override, or a future third variant all work without editing this.
+if docker compose config 2>/dev/null | grep -qE '^[[:space:]]+build:'; then
+  echo "[deploy] building the application image (this takes a few minutes the first time)..."
+  docker compose build
+else
+  echo "[deploy] pulling the published application image..."
+  docker compose pull
+fi
 
 echo "[deploy] starting the database..."
 docker compose up -d db

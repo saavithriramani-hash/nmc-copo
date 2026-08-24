@@ -1,0 +1,96 @@
+# Build the application image and publish it to the GitHub Container
+# Registry, so a server can PULL the application instead of compiling it.
+#
+# The build needs about 4 GB of memory. Doing it here rather than on the
+# college server means the server needs only enough memory to RUN the
+# application, and that a deployment is a download rather than a
+# five-minute compile nobody can interrupt safely.
+#
+# Published as:
+#   ghcr.io/<owner>/<repo>:latest      every push to main
+#   ghcr.io/<owner>/<repo>:v1.2.3      every tag beginning with v
+#   ghcr.io/<owner>/<repo>:<sha>       always, so any build is reachable
+#
+# Pin APP_VERSION on the server to one of these. Tracking `latest` means
+# the next `docker compose pull` changes the application under people who
+# did not ask for it.
+name: Publish image
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  # One publish at a time per ref; a newer push supersedes an older build.
+  group: publish-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # The image is not published unless the suite passes. An image that
+    # reaches the college server is one that computed every attainment
+    # figure in the test suite correctly.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # The Prisma client is generated code; typecheck fails without it.
+      - run: npx prisma generate --schema packages/db/prisma/schema.prisma
+      - run: npm run typecheck --workspaces --if-present
+      - run: npm test --workspaces --if-present
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Required to push to ghcr.io with the automatic GITHUB_TOKEN.
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          # Lower-cased by the action: ghcr.io rejects capitals, and a
+          # repository name with any would fail at push time only.
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=tag
+            type=sha,format=long
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Layer cache in the registry, so an unchanged dependency tree
+          # is not rebuilt on every push.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: What to do with it
+        run: |
+          echo "Published:"
+          echo "${{ steps.meta.outputs.tags }}" | sed 's/^/  /'
+          echo
+          echo "On the server:"
+          echo "  docker compose -f docker-compose.prod.yml pull"
+          echo "  docker compose -f docker-compose.prod.yml up -d"

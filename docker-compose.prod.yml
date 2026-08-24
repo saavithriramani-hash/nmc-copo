@@ -1,0 +1,143 @@
+# CO–PO Attainment — the same stack, from a PUBLISHED image.
+#
+# Identical to docker-compose.yml in every respect but one: the app is
+# PULLED from a container registry instead of being built on the server.
+# Use this one when deploying to a host that builds nothing — a Docker
+# VPS provisioned from a panel, for instance — or on any machine with too
+# little memory to compile the application (the build needs about 4 GB;
+# a 1 GB box is killed part-way and the failure looks unrelated).
+#
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# or, to get the first administrator created as well:
+#
+#   COMPOSE_FILE=docker-compose.prod.yml ops/deploy.sh
+#
+# The image is published by .github/workflows/publish-image.yml on every
+# push to main. Pin a version with APP_VERSION rather than tracking
+# `latest`, so an upgrade is a decision and never a surprise restart.
+#
+# STILL NEEDS THE REPOSITORY ON DISK. The backup container mounts ./ops
+# for its scripts, so this file is run from a checkout, not pasted on its
+# own. Panel deployments that clone the repository satisfy this already.
+#
+# Everything else — the settings, the volumes, the ports, the operations
+# manual — is unchanged. See docs/OPERATIONS.md.
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '5'
+
+services:
+  db:
+    image: postgres:16-bookworm
+    container_name: copo-db
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-copo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-copo}
+      # Deterministic collation, so ordering never changes under us.
+      POSTGRES_INITDB_ARGS: '--encoding=UTF8 --locale=C'
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-copo} -d ${POSTGRES_DB:-copo}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    # Not published: only the other containers may reach the database.
+    expose:
+      - '5432'
+
+  app:
+    # THE ONE DIFFERENCE: pulled, not built. COPO_IMAGE is overridable so
+    # a fork publishes to its own registry without editing this file.
+    image: ${COPO_IMAGE:-ghcr.io/saavithriramani-hash/nmc-copo}:${APP_VERSION:-latest}
+    container_name: copo-app
+    restart: unless-stopped
+    logging: *default-logging
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-copo}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-copo}
+      NODE_ENV: production
+      COPO_STORAGE_DIR: /app/storage
+      BACKUP_DIR: /backups
+      # The one-time token that authorises creating the FIRST
+      # administrator. ops/deploy.sh generates it and sends it as a
+      # header; without it here the application had nothing to compare
+      # against, so the check silently passed and anyone who could reach
+      # the port during the first few minutes could claim the account.
+      # The route locks itself permanently once an administrator exists.
+      BOOTSTRAP_TOKEN: ${BOOTSTRAP_TOKEN:-}
+      # Whether the session cookie is marked Secure. A production build
+      # defaults to yes — correct behind TLS, and fatal without it: the
+      # browser silently discards the cookie and every user outside the
+      # server itself is returned to the login screen. Set to false in
+      # .env while the system is served over plain HTTP.
+      COPO_COOKIE_SECURE: ${COPO_COOKIE_SECURE:-}
+      # Local time for the container. Timestamps in the log and the
+      # health page otherwise read UTC, which is 5½ hours behind the
+      # people reading them.
+      TZ: ${TZ:-Asia/Kolkata}
+    volumes:
+      # Accreditation bundles and data exports.
+      - app_storage:/app/storage
+      # Read-only: the app reports on backups, it never writes them.
+      - ${BACKUP_DIR:-./backups}:/backups:ro
+    ports:
+      - '${APP_PORT:-3000}:3000'
+
+  backup:
+    # The SAME major version as db, so pg_dump always matches the server.
+    image: postgres:16-bookworm
+    container_name: copo-backup
+    restart: unless-stopped
+    logging: *default-logging
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-copo}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-copo}
+      # BACKUP_AT is read as the CONTAINER's local time. Without this the
+      # container is UTC, so the default 02:00 fires at 07:30 in Tamil
+      # Nadu — the middle of the working day, which is the one time the
+      # nightly dump was meant to avoid.
+      TZ: ${TZ:-Asia/Kolkata}
+      BACKUP_DIR: /backups
+      BACKUP_SECONDARY_DIR: ${BACKUP_SECONDARY_DIR:-}
+      BACKUP_AT: ${BACKUP_AT:-02:00}
+      KEEP_DAILY_DAYS: ${KEEP_DAILY_DAYS:-35}
+      KEEP_WEEKLY_DAYS: ${KEEP_WEEKLY_DAYS:-400}
+      KEEP_MONTHLY_DAYS: ${KEEP_MONTHLY_DAYS:-2200}
+      VERIFY_EVERY_DAYS: ${VERIFY_EVERY_DAYS:-7}
+      # Nightly housekeeping (ops/cleanup.sh). Derived and expired things
+      # only — the audit log has no retention setting and is never pruned.
+      COPO_STORAGE_DIR: /app/storage
+      KEEP_BUNDLE_WORKDIR_DAYS: ${KEEP_BUNDLE_WORKDIR_DAYS:-30}
+      KEEP_JOB_DAYS: ${KEEP_JOB_DAYS:-180}
+      KEEP_EXPIRED_SESSION_DAYS: ${KEEP_EXPIRED_SESSION_DAYS:-90}
+    volumes:
+      - ${BACKUP_DIR:-./backups}:/backups
+      # The second location on campus: a share from another machine,
+      # mounted here. Left as ./backups-secondary if not configured.
+      - ${BACKUP_SECONDARY_MOUNT:-./backups-secondary}:/backups-secondary
+      # The app's storage, so nightly housekeeping can clear the working
+      # directories left behind by finished bundles. This container is
+      # where scheduled maintenance lives; the app itself runs no timers.
+      - app_storage:/app/storage
+      - ./ops:/ops:ro
+    entrypoint: ['/bin/bash', '/ops/backup-loop.sh']
+
+volumes:
+  db_data:
+  app_storage:

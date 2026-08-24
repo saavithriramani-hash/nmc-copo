@@ -21,8 +21,16 @@ echo "[upgrade] recording the current image, so you can roll back..."
 PREVIOUS_IMAGE="$(docker compose images app --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | head -n1 || true)"
 echo "${PREVIOUS_IMAGE}" > .last-good-image 2>/dev/null || true
 
-echo "[upgrade] building the new image..."
-docker compose build app
+# Build, or pull — see the same decision in deploy.sh. The rollback
+# recorded just above works either way: it names the image that was
+# running, which is what `docker compose up` would be told to use again.
+if docker compose config 2>/dev/null | grep -qE '^[[:space:]]+build:'; then
+  echo "[upgrade] building the new image..."
+  docker compose build app
+else
+  echo "[upgrade] pulling the new published image..."
+  docker compose pull app
+fi
 
 echo "[upgrade] restarting the application (migrations apply on start)..."
 docker compose up -d app

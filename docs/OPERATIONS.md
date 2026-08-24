@@ -86,6 +86,57 @@ Then open **System health** (top menu) and confirm everything is green.
 
 ---
 
+### Deploying without building (small servers, panel-provisioned VPS)
+
+`ops/deploy.sh` compiles the application on the server. That needs about
+**4 GB of memory**; on a smaller machine the build is killed part-way and
+the error rarely mentions memory.
+
+There is a second stack file that **downloads** a ready-made application
+instead of compiling one. It is the same three containers, the same
+settings and the same manual — only the application is pulled rather than
+built:
+
+```
+COMPOSE_FILE=docker-compose.prod.yml ops/deploy.sh
+```
+
+Set that variable once and everything else in this manual works
+unchanged — upgrade, backup, restore, all of it:
+
+```
+echo 'export COMPOSE_FILE=docker-compose.prod.yml' >> ~/.bashrc
+```
+
+The image is built and published automatically by GitHub whenever the
+code changes, and the test suite must pass first — an image that reaches
+this server is one that computed every figure in the tests correctly.
+
+Two things to know:
+
+- **The repository still has to be on the server.** The backup container
+  reads its scripts from `ops/`. Clone the project as usual; only the
+  compiling is skipped.
+- **If the GitHub repository is private, so is the image.** Sign in once
+  on the server, with a GitHub token that has `read:packages`:
+  ```
+  docker login ghcr.io -u YOUR_GITHUB_USERNAME
+  ```
+  Alternatively make the package public in GitHub → Packages → the
+  package → Package settings → Change visibility. The image contains the
+  application, not the college's data — the data never leaves the
+  database volume on this server.
+
+**Pin the version.** Left alone, the server follows `latest` and takes
+whatever was published most recently the next time it restarts. Choose
+when that happens by naming a version in `.env`:
+
+```
+APP_VERSION=v1.0.0
+```
+
+---
+
 ## 2. Upgrade (install a new version)
 
 ```
