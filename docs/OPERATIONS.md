@@ -137,6 +137,33 @@ APP_VERSION=v1.0.0
 
 ---
 
+### Before a busy marking window: the connection pool
+
+`DB_CONNECTION_LIMIT` in `.env` is how many database connections the
+application may hold open. It defaults to **20**, which is comfortable for
+a few hundred people entering marks at once.
+
+It matters more than it looks. Left unset, the underlying default is
+*(processor cores x 2) + 1* — **three connections on a one-core server**.
+A few hundred faculty working against three connections do not see
+errors; they see a QUEUE, which everybody reports as "the system is
+slow", and which is very hard to recognise from that description.
+
+Raise it before the window, not during one:
+
+```
+# in .env
+DB_CONNECTION_LIMIT=40
+docker compose up -d app
+```
+
+The database allows 100 connections in total, so leave room below that
+for the backup container and for a `psql` session. There is no benefit in
+going near 100 — throughput runs out of processor cores long before it
+runs out of connections.
+
+---
+
 ## 2. Upgrade (install a new version)
 
 ```
