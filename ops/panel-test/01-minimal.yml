@@ -1,0 +1,11 @@
+# DIAGNOSTIC ONLY — delete once the real stack deploys.
+#
+# The simplest compose file that can exist: one public image, one port,
+# no variables, no anchors, no health checks. If a hosting panel cannot
+# deploy THIS, the problem is the panel, the URL or the account — not the
+# application's compose file.
+services:
+  hello:
+    image: nginx:alpine
+    ports:
+      - '8080:80'

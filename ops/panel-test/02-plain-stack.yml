@@ -1,0 +1,98 @@
+# DIAGNOSTIC ONLY — delete once the real stack deploys.
+#
+# The real stack with the three constructs a basic compose parser is most
+# likely to reject removed:
+#
+#   1. YAML anchors (x-logging / &default-logging / *default-logging)
+#      — the logging blocks are written out in full instead.
+#   2. ${VAR:?message} required-variable syntax — plain ${VAR} here, so
+#      the stack no longer refuses to start without a password. That is a
+#      real loss of safety and is why this is a diagnostic, not the file
+#      to keep.
+#   3. Nothing else: the images, volumes, ports and settings are the same.
+services:
+  db:
+    image: postgres:16-bookworm
+    container_name: copo-db
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-copo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-copo}
+      POSTGRES_INITDB_ARGS: '--encoding=UTF8 --locale=C'
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U copo -d copo']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  app:
+    image: ${COPO_IMAGE:-ghcr.io/saavithriramani-hash/nmc-copo}:${APP_VERSION:-latest}
+    container_name: copo-app
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-copo}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-copo}?connection_limit=${DB_CONNECTION_LIMIT:-20}
+      NODE_ENV: production
+      COPO_STORAGE_DIR: /app/storage
+      BACKUP_DIR: /backups
+      BOOTSTRAP_TOKEN: ${BOOTSTRAP_TOKEN:-}
+      COPO_COOKIE_SECURE: ${COPO_COOKIE_SECURE:-}
+      TZ: ${TZ:-Asia/Kolkata}
+    volumes:
+      - app_storage:/app/storage
+      - backups:/backups:ro
+    ports:
+      - '${APP_PORT:-3000}:3000'
+
+  backup:
+    image: ${COPO_BACKUP_IMAGE:-ghcr.io/saavithriramani-hash/nmc-copo-backup}:${APP_VERSION:-latest}
+    container_name: copo-backup
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-copo}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-copo}
+      TZ: ${TZ:-Asia/Kolkata}
+      BACKUP_DIR: /backups
+      BACKUP_AT: ${BACKUP_AT:-02:00}
+      KEEP_DAILY_DAYS: ${KEEP_DAILY_DAYS:-35}
+      KEEP_WEEKLY_DAYS: ${KEEP_WEEKLY_DAYS:-400}
+      KEEP_MONTHLY_DAYS: ${KEEP_MONTHLY_DAYS:-2200}
+      VERIFY_EVERY_DAYS: ${VERIFY_EVERY_DAYS:-7}
+      COPO_STORAGE_DIR: /app/storage
+      KEEP_BUNDLE_WORKDIR_DAYS: ${KEEP_BUNDLE_WORKDIR_DAYS:-30}
+      KEEP_JOB_DAYS: ${KEEP_JOB_DAYS:-180}
+      KEEP_EXPIRED_SESSION_DAYS: ${KEEP_EXPIRED_SESSION_DAYS:-90}
+    volumes:
+      - backups:/backups
+      - app_storage:/app/storage
+
+volumes:
+  db_data:
+  app_storage:
+  backups:
