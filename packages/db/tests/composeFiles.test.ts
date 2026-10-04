@@ -34,21 +34,55 @@ const significantLines = (text: string): string[] =>
     .filter((line) => line.trim() !== '' && !line.trim().startsWith('#'));
 
 describe('docker-compose.prod.yml — the same stack, pulled instead of built', () => {
-  it('differs from the source-built file by exactly the image line', () => {
+  it('differs from the source-built file ONLY in how the two images arrive', () => {
     const a = significantLines(servicesOf(dev));
     const b = significantLines(servicesOf(prod));
 
     const onlyInDev = a.filter((line) => !b.includes(line));
     const onlyInProd = b.filter((line) => !a.includes(line));
 
-    // Dev builds: three lines (build:, context:, dockerfile:) plus its
-    // own image line. Prod replaces all four with one pulled image.
+    // Dev builds the application and bind-mounts ops/ into a stock
+    // postgres image. Prod pulls both, so ops/ travels inside the backup
+    // image and neither the build context nor the mount is needed.
     expect(onlyInDev.map((l) => l.trim()).sort()).toEqual(
-      ['build:', 'context: .', 'dockerfile: Dockerfile', 'image: copo-app:${APP_VERSION:-latest}'].sort(),
+      [
+        'build:',
+        'context: .',
+        'dockerfile: Dockerfile',
+        'image: copo-app:${APP_VERSION:-latest}',
+        '- ./ops:/ops:ro',
+        "entrypoint: ['/bin/bash', '/ops/backup-loop.sh']",
+      ].sort(),
     );
-    expect(onlyInProd.map((l) => l.trim())).toEqual([
-      'image: ${COPO_IMAGE:-ghcr.io/saavithriramani-hash/nmc-copo}:${APP_VERSION:-latest}',
-    ]);
+    expect(onlyInProd.map((l) => l.trim()).sort()).toEqual(
+      [
+        'image: ${COPO_IMAGE:-ghcr.io/saavithriramani-hash/nmc-copo}:${APP_VERSION:-latest}',
+        'image: ${COPO_BACKUP_IMAGE:-ghcr.io/saavithriramani-hash/nmc-copo-backup}:${APP_VERSION:-latest}',
+      ].sort(),
+    );
+  });
+
+  it('needs NOTHING from the repository on the server', () => {
+    // The point of this file: a hosting panel that deploys from its URL
+    // alone never puts ops/ on disk. Bind-mount it and the backup
+    // container dies on a missing script while the database and the
+    // application come up healthy beside it — so the first anyone learns
+    // that nothing was ever dumped is when a restore is needed.
+    const services = servicesOf(prod);
+    expect(services).not.toContain('./ops');
+    expect(services).not.toContain('build:');
+    expect(services).not.toContain('context:');
+  });
+
+  it('still runs the backup loop — from the image rather than a mount', () => {
+    // Dropping the mount must not quietly drop the backups with it.
+    expect(prod).toContain('nmc-copo-backup');
+    const backupImage = readFileSync(path.join(root, 'Dockerfile.backup'), 'utf8');
+    expect(backupImage).toContain('COPY ops/ /ops/');
+    expect(backupImage).toContain('/ops/backup-loop.sh');
+    // Same Postgres major version as the database, or pg_dump mismatches.
+    expect(backupImage).toContain('postgres:16');
+    expect(dev).toContain('postgres:16-bookworm');
   });
 
   it('runs the same three containers, named the same', () => {
@@ -72,9 +106,12 @@ describe('docker-compose.prod.yml — the same stack, pulled instead of built', 
   });
 
   it('keeps the nightly backup, its second copy, and the restore drill', () => {
-    expect(prod).toContain('/ops/backup-loop.sh');
+    // The loop itself now lives in the backup IMAGE (see the test below);
+    // what this file still has to carry is the settings that drive it.
     expect(prod).toContain('BACKUP_SECONDARY_DIR');
     expect(prod).toContain('VERIFY_EVERY_DAYS');
+    expect(prod).toContain('BACKUP_AT');
+    expect(prod).toContain('KEEP_MONTHLY_DAYS');
   });
 
   it('mounts the backups read-only into the application', () => {

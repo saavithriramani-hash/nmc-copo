@@ -137,6 +137,63 @@ APP_VERSION=v1.0.0
 
 ---
 
+### Deploying from a hosting panel (no SSH, no repository)
+
+Some hosts deploy a stack from the **URL of a compose file** — you paste
+a link and they do the rest. That works here, with `docker-compose.prod.yml`:
+
+```
+https://raw.githubusercontent.com/saavithriramani-hash/nmc-copo/main/docker-compose.prod.yml
+```
+
+All three containers come from published images, so nothing from this
+repository needs to be on the server — the backup container carries the
+`ops/` scripts inside it.
+
+**Set these in the panel's environment settings** before deploying:
+
+```
+POSTGRES_PASSWORD   a long random string; nobody ever types it
+BOOTSTRAP_TOKEN     a long random string; used once, to create the first
+                    administrator, then never again
+COPO_COOKIE_SECURE  false until a certificate is in front; then true
+```
+
+`POSTGRES_PASSWORD` is required — the stack refuses to start without it.
+Everything else has a working default, including `TZ=Asia/Kolkata`.
+
+#### Creating the first administrator
+
+There is no interactive prompt on a panel deploy, so make the account
+with one request once the application is up. From your own machine:
+
+```
+curl -X POST https://your-server/api/bootstrap/admin   -H 'Content-Type: application/json'   -H 'x-bootstrap-token: THE_TOKEN_YOU_SET'   -d '{"email":"admin@nmc.edu.in","fullName":"System Administrator"}'
+```
+
+It replies with a **temporary password, shown exactly once**:
+
+```
+{"userId":"...","email":"admin@nmc.edu.in","temporaryPassword":"...","mustChangePassword":true}
+```
+
+Sign in with it and the application requires a new password immediately.
+
+**You cannot choose the password, and that is deliberate.** A password
+typed into a deployment note survives in that note. The system issues one,
+shows it once, and forces it to be replaced at first sign-in.
+
+The route then **locks itself for ever**: once an administrator exists it
+answers 409 to everyone, token or not. Every later account is created
+inside the application, under **Accounts & roles**.
+
+If `BOOTSTRAP_TOKEN` is not set, the route refuses rather than allowing
+the call. That is on purpose: the application answers on a public address
+from the moment it starts, and an unguarded route there would hand the
+first passer-by an administrator account.
+
+---
+
 ### Before a busy marking window: the connection pool
 
 `DB_CONNECTION_LIMIT` in `.env` is how many database connections the

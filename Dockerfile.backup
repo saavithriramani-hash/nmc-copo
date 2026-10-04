@@ -1,0 +1,24 @@
+# The backup, restore-drill and housekeeping container.
+#
+# Postgres 16 — the SAME major version as the database, so pg_dump always
+# matches the server — with the operations scripts baked in.
+#
+# WHY THIS IMAGE EXISTS. The scripts used to arrive by bind-mounting
+# ./ops from the repository. That works when somebody clones the project
+# onto the server, and fails silently when they do not: a hosting panel
+# that deploys from a compose-file URL never puts ops/ on disk, so the
+# container dies looking for /ops/backup-loop.sh while the database and
+# the application come up perfectly healthy beside it. Nobody notices
+# until a restore is needed, which is the worst possible moment to learn
+# that nothing was ever dumped.
+#
+# Baked in, the stack is self-contained: one compose file, three images,
+# no repository required on the server.
+FROM postgres:16-bookworm
+
+# bash for the scripts; the postgres image already carries pg_dump,
+# pg_restore and psql, which is the whole reason this is built on it.
+COPY ops/ /ops/
+RUN chmod +x /ops/*.sh
+
+ENTRYPOINT ["/bin/bash", "/ops/backup-loop.sh"]

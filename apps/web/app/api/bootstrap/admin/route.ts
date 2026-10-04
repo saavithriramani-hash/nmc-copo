@@ -27,8 +27,30 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
+  // FAIL CLOSED. An unset token used to mean "no check", which read as
+  // harmless when this only ever ran on a campus machine during a
+  // supervised install. It is not harmless on a VPS deployed from a
+  // hosting panel: the application answers on a public address from the
+  // moment it starts, nobody sets BOOTSTRAP_TOKEN unless told to, and
+  // compose passes an EMPTY STRING by default — which is falsy, so the
+  // check disappeared exactly where it was most needed. The first
+  // stranger to find this route would have become the administrator of
+  // the college's attainment system.
+  //
+  // Refusing is safe: ops/deploy.sh generates a token and sets it, so the
+  // sanctioned path is unaffected, and anyone deploying another way is
+  // told precisely what to do.
   const expectedToken = process.env.BOOTSTRAP_TOKEN;
-  if (expectedToken && request.headers.get('x-bootstrap-token') !== expectedToken) {
+  if (!expectedToken) {
+    return NextResponse.json(
+      {
+        error:
+          'BOOTSTRAP_TOKEN is not set on the server, so the first administrator cannot be created. Set it in .env (or in your host panel environment settings), restart the application, and call this route again with an x-bootstrap-token header.',
+      },
+      { status: 403 },
+    );
+  }
+  if (request.headers.get('x-bootstrap-token') !== expectedToken) {
     return NextResponse.json({ error: 'Bootstrap token missing or incorrect.' }, { status: 403 });
   }
 

@@ -74,7 +74,8 @@ jobs:
             type=ref,event=tag
             type=sha,format=long
 
-      - uses: docker/build-push-action@v6
+      - name: Application image
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
@@ -86,11 +87,39 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # The backup, restore-drill and housekeeping container, with ops/
+      # baked in. Published so the stack needs no repository on the
+      # server — see Dockerfile.backup for why that matters.
+      - id: meta-backup
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}-backup
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=tag
+            type=sha,format=long
+
+      - name: Backup image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.backup
+          push: true
+          tags: ${{ steps.meta-backup.outputs.tags }}
+          labels: ${{ steps.meta-backup.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
       - name: What to do with it
         run: |
           echo "Published:"
           echo "${{ steps.meta.outputs.tags }}" | sed 's/^/  /'
+          echo "${{ steps.meta-backup.outputs.tags }}" | sed 's/^/  /'
           echo
           echo "On the server:"
           echo "  docker compose -f docker-compose.prod.yml pull"
           echo "  docker compose -f docker-compose.prod.yml up -d"
+          echo
+          echo "Both packages must be PUBLIC for a server to pull them"
+          echo "without credentials: GitHub -> Packages -> each one ->"
+          echo "Package settings -> Change visibility."

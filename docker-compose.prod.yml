@@ -17,9 +17,11 @@
 # push to main. Pin a version with APP_VERSION rather than tracking
 # `latest`, so an upgrade is a decision and never a surprise restart.
 #
-# STILL NEEDS THE REPOSITORY ON DISK. The backup container mounts ./ops
-# for its scripts, so this file is run from a checkout, not pasted on its
-# own. Panel deployments that clone the repository satisfy this already.
+# SELF-CONTAINED. Three published images and nothing else: no repository
+# on the server, no build step, no scripts to copy across. A hosting
+# panel that deploys from the URL of this file alone is enough — which is
+# why the backup container carries ops/ inside it rather than mounting
+# the directory, since a panel deploy never puts one on disk.
 #
 # Everything else — the settings, the volumes, the ports, the operations
 # manual — is unchanged. See docs/OPERATIONS.md.
@@ -109,8 +111,10 @@ services:
       - '${APP_PORT:-3000}:3000'
 
   backup:
-    # The SAME major version as db, so pg_dump always matches the server.
-    image: postgres:16-bookworm
+    # Postgres 16 — the same major version as db, so pg_dump always
+    # matches the server — with ops/ baked in, so this stack needs no
+    # repository on the server. See Dockerfile.backup.
+    image: ${COPO_BACKUP_IMAGE:-ghcr.io/saavithriramani-hash/nmc-copo-backup}:${APP_VERSION:-latest}
     container_name: copo-backup
     restart: unless-stopped
     logging: *default-logging
@@ -149,8 +153,6 @@ services:
       # directories left behind by finished bundles. This container is
       # where scheduled maintenance lives; the app itself runs no timers.
       - app_storage:/app/storage
-      - ./ops:/ops:ro
-    entrypoint: ['/bin/bash', '/ops/backup-loop.sh']
 
 volumes:
   db_data:
