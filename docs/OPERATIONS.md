@@ -86,64 +86,60 @@ Then open **System health** (top menu) and confirm everything is green.
 
 ---
 
-### Deploying without building (small servers, panel-provisioned VPS)
+### Building on the server instead (developers only)
 
-`ops/deploy.sh` compiles the application on the server. That needs about
-**4 GB of memory**; on a smaller machine the build is killed part-way and
-the error rarely mentions memory.
+`docker-compose.yml` **pulls** both application images, so the server
+compiles nothing. That is what you want on a college server: a deployment
+is a download, and a small VPS that could never finish the build — it
+wants about **4 GB of memory**, and on a smaller machine is killed
+part-way with an error that rarely mentions memory — runs it comfortably.
 
-There is a second stack file that **downloads** a ready-made application
-instead of compiling one. It is the same three containers, the same
-settings and the same manual — only the application is pulled rather than
-built:
+The images are built and published by GitHub whenever the code changes,
+and the test suite must pass first: an image that reaches this server is
+one that computed every figure in the tests correctly.
 
-```
-COMPOSE_FILE=docker-compose.prod.yml ops/deploy.sh
-```
-
-Set that variable once and everything else in this manual works
-unchanged — upgrade, backup, restore, all of it:
+To build from source instead — developing locally, or running a change
+that has not been published yet — use the other file:
 
 ```
-echo 'export COMPOSE_FILE=docker-compose.prod.yml' >> ~/.bashrc
+COMPOSE_FILE=docker-compose.dev.yml ops/deploy.sh
 ```
 
-The image is built and published automatically by GitHub whenever the
-code changes, and the test suite must pass first — an image that reaches
-this server is one that computed every figure in the tests correctly.
+Set it once and every other instruction in this manual works unchanged:
 
-Two things to know:
+```
+echo 'export COMPOSE_FILE=docker-compose.dev.yml' >> ~/.bashrc
+```
 
-- **The repository still has to be on the server.** The backup container
-  reads its scripts from `ops/`. Clone the project as usual; only the
-  compiling is skipped.
-- **If the GitHub repository is private, so is the image.** Sign in once
-  on the server, with a GitHub token that has `read:packages`:
-  ```
-  docker login ghcr.io -u YOUR_GITHUB_USERNAME
-  ```
-  Alternatively make the package public in GitHub → Packages → the
-  package → Package settings → Change visibility. The image contains the
-  application, not the college's data — the data never leaves the
-  database volume on this server.
-
-**Pin the version.** Left alone, the server follows `latest` and takes
-whatever was published most recently the next time it restarts. Choose
-when that happens by naming a version in `.env`:
+**Pin the version on a real deployment.** Left alone, the server follows
+`latest` and takes whatever was published most recently the next time it
+restarts. Choose when that happens by naming a version in `.env`:
 
 ```
 APP_VERSION=v1.0.0
 ```
+
+**If the GitHub repository is private, so are the images.** Sign in once
+on the server with a token that has `read:packages`:
+
+```
+docker login ghcr.io -u YOUR_GITHUB_USERNAME
+```
+
+Or make both packages public — GitHub → Packages → each package →
+Package settings → Change visibility. The images hold the application,
+not the college's data; the data never leaves the database volume on this
+server.
 
 ---
 
 ### Deploying from a hosting panel (no SSH, no repository)
 
 Some hosts deploy a stack from the **URL of a compose file** — you paste
-a link and they do the rest. That works here, with `docker-compose.prod.yml`:
+a link and they do the rest. That works here, with `docker-compose.yml`:
 
 ```
-https://raw.githubusercontent.com/saavithriramani-hash/nmc-copo/main/docker-compose.prod.yml
+https://raw.githubusercontent.com/saavithriramani-hash/nmc-copo/main/docker-compose.yml
 ```
 
 All three containers come from published images, so nothing from this

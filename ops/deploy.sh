@@ -44,7 +44,7 @@ BOOTSTRAP_TOKEN="$(grep '^BOOTSTRAP_TOKEN=' .env | cut -d= -f2-)"
 
 # Build, or pull — whichever this compose file calls for.
 #
-# docker-compose.yml builds the application from source; the .prod.yml
+# docker-compose.yml pulls published images; docker-compose.dev.yml
 # variant pulls a published image instead, for a server with too little
 # memory to compile it (the build wants about 4 GB). Deciding from the
 # RESOLVED configuration rather than a filename means COMPOSE_FILE, an

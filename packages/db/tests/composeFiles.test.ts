@@ -5,9 +5,9 @@ import { describe, expect, it } from 'vitest';
 /**
  * The two compose files must not drift apart.
  *
- * `docker-compose.yml` builds the application from source;
- * `docker-compose.prod.yml` pulls a published image instead, for a
- * server with too little memory to compile it. They are otherwise the
+ * `docker-compose.yml` is what the college server deploys: it pulls both
+ * application images. `docker-compose.dev.yml` builds from source
+ * instead, for developing locally or running an unpublished change. They are otherwise the
  * SAME stack, and that is the whole danger: a volume added to one, a
  * setting changed in one, and the college server quietly runs something
  * nobody described. The difference is meant to be exactly one line.
@@ -20,8 +20,8 @@ import { describe, expect, it } from 'vitest';
 const root = path.join(__dirname, '..', '..', '..');
 const read = (name: string): string => readFileSync(path.join(root, name), 'utf8');
 
-const dev = read('docker-compose.yml');
-const prod = read('docker-compose.prod.yml');
+const dev = read('docker-compose.dev.yml');
+const prod = read('docker-compose.yml');
 
 /** Everything from `services:` down — the part that defines the stack. */
 const servicesOf = (text: string): string => text.slice(text.indexOf('services:'));
@@ -33,7 +33,7 @@ const significantLines = (text: string): string[] =>
     .map((line) => line.replace(/\s+$/, ''))
     .filter((line) => line.trim() !== '' && !line.trim().startsWith('#'));
 
-describe('docker-compose.prod.yml — the same stack, pulled instead of built', () => {
+describe('docker-compose.yml — the deployed stack, pulled rather than built', () => {
   it('differs from the source-built file ONLY in how the two images arrive', () => {
     const a = significantLines(servicesOf(dev));
     const b = significantLines(servicesOf(prod));

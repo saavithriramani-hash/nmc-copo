@@ -117,8 +117,8 @@ jobs:
           echo "${{ steps.meta-backup.outputs.tags }}" | sed 's/^/  /'
           echo
           echo "On the server:"
-          echo "  docker compose -f docker-compose.prod.yml pull"
-          echo "  docker compose -f docker-compose.prod.yml up -d"
+          echo "  docker compose pull"
+          echo "  docker compose up -d"
           echo
           echo "Both packages must be PUBLIC for a server to pull them"
           echo "without credentials: GitHub -> Packages -> each one ->"

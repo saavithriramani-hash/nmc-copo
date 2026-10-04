@@ -1,22 +1,34 @@
-# CO–PO Attainment — production stack for the college server.
+# CO–PO Attainment — the production stack for the college server.
 #
-# Three containers and nothing else:
-#   db      PostgreSQL, the only place data lives
-#   app     the application (applies migrations at start-up)
-#   backup  takes the nightly dump, copies it off the machine, and
-#           proves weekly that the dump can actually be restored
+# THE FILE YOU DEPLOY. Both application images are PULLED from a
+# container registry, so the server compiles nothing: a hosting panel
+# deploying from this file's URL is enough, and a small VPS that could
+# never complete the build (it wants about 4 GB) runs it comfortably.
 #
-# No Kubernetes, no message queue, no external service. Everything the
-# system needs is in this file. See docs/OPERATIONS.md.
+#   docker compose up -d
+#
+# or, to get the first administrator created as well:
+#
+#   ops/deploy.sh
+#
+# To build from source instead — developing locally, or running a change
+# that is not published yet — use docker-compose.dev.yml:
+#
+#   COMPOSE_FILE=docker-compose.dev.yml ops/deploy.sh
+#
+# The images are published by .github/workflows/publish-image.yml on
+# every push to main. Pin a version with APP_VERSION rather than tracking
+# `latest`, so an upgrade is a decision and never a surprise restart.
+#
+# SELF-CONTAINED. Three published images and nothing else: no repository
+# on the server, no build step, no scripts to copy across. A hosting
+# panel that deploys from the URL of this file alone is enough — which is
+# why the backup container carries ops/ inside it rather than mounting
+# the directory, since a panel deploy never puts one on disk.
+#
+# Everything else — the settings, the volumes, the ports, the operations
+# manual — is unchanged. See docs/OPERATIONS.md.
 
-# Container logs are CAPPED. Docker's default json-file driver grows
-# without limit, and on a machine nobody watches that ends as a full
-# disk with no obvious cause — the database stops accepting writes and
-# the failure looks like a database fault rather than a log file. Three
-# containers x 5 x 10 MB puts a hard ceiling of 150 MB on the lot.
-#
-# Raise max-file if you need longer history for diagnosis; the practical
-# limit is how much of the disk you are willing to spend on it.
 x-logging: &default-logging
   driver: json-file
   options:
@@ -48,10 +60,9 @@ services:
       - '5432'
 
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: copo-app:${APP_VERSION:-latest}
+    # THE ONE DIFFERENCE: pulled, not built. COPO_IMAGE is overridable so
+    # a fork publishes to its own registry without editing this file.
+    image: ${COPO_IMAGE:-ghcr.io/saavithriramani-hash/nmc-copo}:${APP_VERSION:-latest}
     container_name: copo-app
     restart: unless-stopped
     logging: *default-logging
@@ -103,8 +114,10 @@ services:
       - '${APP_PORT:-3000}:3000'
 
   backup:
-    # The SAME major version as db, so pg_dump always matches the server.
-    image: postgres:16-bookworm
+    # Postgres 16 — the same major version as db, so pg_dump always
+    # matches the server — with ops/ baked in, so this stack needs no
+    # repository on the server. See Dockerfile.backup.
+    image: ${COPO_BACKUP_IMAGE:-ghcr.io/saavithriramani-hash/nmc-copo-backup}:${APP_VERSION:-latest}
     container_name: copo-backup
     restart: unless-stopped
     logging: *default-logging
@@ -143,8 +156,6 @@ services:
       # directories left behind by finished bundles. This container is
       # where scheduled maintenance lives; the app itself runs no timers.
       - app_storage:/app/storage
-      - ./ops:/ops:ro
-    entrypoint: ['/bin/bash', '/ops/backup-loop.sh']
 
 volumes:
   db_data:
