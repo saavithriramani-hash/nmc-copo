@@ -1,0 +1,90 @@
+# DIAGNOSTIC ONLY — delete once the real stack deploys.
+#
+# A CONTROLLED test. The full structure of the real stack — three
+# services, variable interpolation, a health check, depends_on with a
+# condition, named volumes, container names, restart policies, logging —
+# but using ONLY images that can be pulled without credentials.
+#
+# The application is stood in for by nginx, because the real application
+# image is private and would fail the pull regardless of syntax. That is
+# the variable this test removes: the two earlier tests differed in BOTH
+# structure and image accessibility, so neither could tell us which
+# mattered.
+#
+#   deploys  -> the structure is fine; the private image is the whole
+#               problem, and nothing in the compose file needs changing.
+#   fails    -> the structure is at fault, and the next step is to add
+#               these features back one at a time from 01-minimal.yml.
+services:
+  db:
+    image: postgres:16-bookworm
+    container_name: copo-test-db
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-copo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-testpassword}
+      POSTGRES_DB: ${POSTGRES_DB:-copo}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U copo -d copo']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  app:
+    # Stands in for ghcr.io/saavithriramani-hash/nmc-copo, which is private.
+    image: nginx:alpine
+    container_name: copo-test-app
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-copo}:${POSTGRES_PASSWORD:-testpassword}@db:5432/${POSTGRES_DB:-copo}
+      TZ: ${TZ:-Asia/Kolkata}
+    volumes:
+      - app_storage:/usr/share/nginx/html
+    ports:
+      - '${APP_PORT:-3000}:80'
+
+  backup:
+    # The real backup image — already public, so this one is genuine.
+    image: ghcr.io/saavithriramani-hash/nmc-copo-backup:latest
+    container_name: copo-test-backup
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-copo}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-testpassword}
+      PGDATABASE: ${POSTGRES_DB:-copo}
+      TZ: ${TZ:-Asia/Kolkata}
+      BACKUP_DIR: /backups
+      BACKUP_AT: ${BACKUP_AT:-02:00}
+    volumes:
+      - backups:/backups
+      - app_storage:/app/storage
+
+volumes:
+  db_data:
+  app_storage:
+  backups:
