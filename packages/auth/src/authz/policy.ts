@@ -57,6 +57,7 @@ export function decide(actor: ActorContext, action: Action, resource: ResourceCo
     case 'course.read':
     case 'course.write':
     case 'course.details.write':
+    case 'course.delete':
     case 'assessment.external.write':
     case 'marks.external.write':
     case 'course.staff':
@@ -251,6 +252,25 @@ function decideCourse(
       // belongs to the people teaching it.
       if (course.status === 'LOCKED') return deny('COURSE_LOCKED');
       return has(actor, 'COE') ? allow('COE') : deny('NOT_PERMITTED');
+    }
+
+    case 'course.delete': {
+      // CR-9: removing a course from the catalogue — the course was
+      // created by mistake, duplicated, or withdrawn before it ran. The
+      // examinations office created it, so the examinations office may
+      // remove it; the administrator holds it too, as with the structure
+      // under CR-5, so a college between Controllers is not stranded.
+      //
+      // DRAFT only. A LOCKED course is closed to the COE (CR-3) and holds
+      // an accreditation record; a SUBMITTED one is in the HoD's hands.
+      // The deletion itself then refuses while ANY recorded work exists —
+      // marks, learner ratings, snapshots, submission history — so neither
+      // role ever reaches academic data through this action. That check
+      // needs counts the policy does not see, and lives at the action.
+      if (course.status === 'LOCKED') return deny('COURSE_LOCKED');
+      if (course.status !== 'DRAFT') return deny('WRONG_STATUS');
+      if (has(actor, 'COE')) return allow('COE');
+      return has(actor, 'ADMIN') ? allow('ADMIN') : deny('NOT_PERMITTED');
     }
 
     case 'assessment.external.write':

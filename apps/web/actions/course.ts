@@ -8,6 +8,7 @@ import { prisma } from '@/lib/db';
 import { guard } from '@/lib/authz';
 import { logAudit } from '@/lib/audit';
 import { requireSession } from '@/lib/session';
+import { courseBlockMessage, courseLabel } from '@/lib/catalogueRemoval';
 
 export async function createCourseAction(formData: FormData): Promise<void> {
   const user = await requireSession();
@@ -125,6 +126,103 @@ export async function updateCourseDetailsAction(
   revalidatePath(`/courses/${courseId}`);
   return { ok: true };
 }
+
+/**
+ * CR-9: delete a course from the catalogue — the COE, or the
+ * administrator. The policy admits a DRAFT course only; this refuses
+ * further while any recorded work exists (catalogueRemoval.ts), and
+ * otherwise removes the course with the set-up it owns, in one
+ * transaction.
+ *
+ * Race safety: a mark, rating, snapshot or submission written after the
+ * count below makes the enrolment or course delete fail on its RESTRICT
+ * foreign key, which rolls the whole transaction back; and the course row
+ * is deleted only while still DRAFT, so a submission in between is caught
+ * too.
+ */
+export type DeleteCourseResult = { ok?: true; error?: string };
+
+export async function deleteCourseAction(courseId: string, fromCoursePage = false): Promise<DeleteCourseResult> {
+  const user = await requireSession();
+  await guard.require(user.userId, { type: 'course.delete', courseId });
+
+  const course = await prisma.course.findUnique({
+    where: { id: courseId },
+    select: {
+      code: true,
+      title: true,
+      semester: true,
+      credits: true,
+      isLaboratory: true,
+      batchId: true,
+      cos: { select: { code: true, statement: true }, orderBy: { displayOrder: 'asc' } },
+      assessments: { select: { name: true, weightGroup: true }, orderBy: { displayOrder: 'asc' } },
+      instructors: { select: { userId: true } },
+      _count: { select: { enrolments: true, snapshots: true, submissions: true } },
+    },
+  });
+  if (!course) return { error: 'That course no longer exists.' };
+
+  const [marks, learnerRatings] = await Promise.all([
+    prisma.markValue.count({ where: { courseId } }),
+    prisma.learnerRating.count({ where: { enrolment: { courseId } } }),
+  ]);
+  const refusal = courseBlockMessage(course, {
+    marks,
+    learnerRatings,
+    snapshots: course._count.snapshots,
+    submissions: course._count.submissions,
+  });
+  if (refusal) return { error: refusal };
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      const ofCourse = { assessment: { courseId } };
+      await tx.assessmentCoTag.deleteMany({ where: ofCourse });
+      await tx.item.deleteMany({ where: ofCourse });
+      await tx.section.deleteMany({ where: ofCourse });
+      await tx.assessment.deleteMany({ where: { courseId } });
+      await tx.articulationMatrix.deleteMany({ where: { co: { courseId } } });
+      await tx.indirectFeedback.deleteMany({ where: { co: { courseId } } });
+      await tx.courseOutcome.deleteMany({ where: { courseId } });
+      await tx.enrolment.deleteMany({ where: { courseId } });
+      await tx.courseInstructor.deleteMany({ where: { courseId } });
+      const { count } = await tx.course.deleteMany({ where: { id: courseId, status: 'DRAFT' } });
+      if (count !== 1) throw new CourseChangedError();
+    });
+  } catch (err) {
+    if (err instanceof CourseChangedError || (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2003')) {
+      return { error: `“${courseLabel(course)}” changed while you were deleting it. Reload the page and look again.` };
+    }
+    throw err;
+  }
+
+  await logAudit({
+    actorId: user.userId,
+    action: 'COURSE_DELETED',
+    entityType: 'Course',
+    entityId: courseId,
+    before: {
+      batchId: course.batchId,
+      code: course.code,
+      title: course.title,
+      semester: course.semester,
+      credits: course.credits?.toString() ?? null,
+      isLaboratory: course.isLaboratory,
+      cos: course.cos,
+      assessments: course.assessments,
+      instructorIds: course.instructors.map((i) => i.userId),
+      enrolments: course._count.enrolments,
+    },
+  });
+  revalidatePath('/courses');
+  // From the course's own page there is nothing left to show: re-rendering
+  // it would fail on the missing course, so leave for the catalogue.
+  if (fromCoursePage) redirect('/courses');
+  return { ok: true };
+}
+
+class CourseChangedError extends Error {}
 
 /**
  * Staffing (FR-4) — `course.staff`, the HoD's decision, not the course

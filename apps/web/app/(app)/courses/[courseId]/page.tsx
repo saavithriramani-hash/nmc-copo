@@ -1,8 +1,10 @@
-import { addInstructorAction, removeInstructorAction } from '@/actions/course';
+import { addInstructorAction, deleteCourseAction, removeInstructorAction } from '@/actions/course';
 import { AddInstructorForm } from '@/components/AddInstructorForm';
+import { ConfirmRemove } from '@/components/ConfirmRemove';
 import { CourseDetailsForm } from '@/components/CourseDetailsForm';
 import { guard } from '@/lib/authz';
 import { prisma } from '@/lib/db';
+import { courseDeletionSummary } from '@/lib/catalogueRemoval';
 import { excludeAssigned } from '@/lib/facultySearch';
 import { requireSession } from '@/lib/session';
 
@@ -19,7 +21,10 @@ export default async function CourseDetailsPage({
 
   const course = await prisma.course.findUniqueOrThrow({
     where: { id: courseId },
-    include: { instructors: { include: { user: { select: { id: true, fullName: true, email: true } } } } },
+    include: {
+      instructors: { include: { user: { select: { id: true, fullName: true, email: true } } } },
+      _count: { select: { cos: true, assessments: true, enrolments: true } },
+    },
   });
   // CR-3: the catalogue entry — code, title, semester, credits and
   // whether this is a practical paper — belongs to the Controller of
@@ -27,6 +32,8 @@ export default async function CourseDetailsPage({
   const canWrite = (await guard.check(user.userId, { type: 'course.details.write', courseId })).allow;
   // Staffing is a separate authority (FR-4): the HoD decides who teaches.
   const canStaff = (await guard.check(user.userId, { type: 'course.staff', courseId })).allow;
+  // CR-9: removing the catalogue entry — the COE (or administrator), DRAFT only.
+  const canDelete = (await guard.check(user.userId, { type: 'course.delete', courseId })).allow;
 
   const addAction = addInstructorAction.bind(null, courseId);
 
@@ -101,6 +108,28 @@ export default async function CourseDetailsPage({
           </p>
         )}
       </section>
+
+      {canDelete ? (
+        <section className="space-y-2">
+          <h2 className="font-medium">Delete course</h2>
+          <p className="text-xs text-gray-500">
+            For a course created by mistake or withdrawn before it ran. Refused while any marks, learner ratings or review
+            history exist (CR-9).
+          </p>
+          <ConfirmRemove
+            action={deleteCourseAction.bind(null, courseId, true)}
+            summary={courseDeletionSummary(course, {
+              cos: course._count.cos,
+              assessments: course._count.assessments,
+              enrolments: course._count.enrolments,
+              instructors: course.instructors.length,
+            })}
+            label="Delete course"
+            confirmLabel="Yes, delete course"
+            pendingLabel="Deleting…"
+          />
+        </section>
+      ) : null}
     </div>
   );
 }

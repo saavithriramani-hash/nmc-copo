@@ -508,6 +508,44 @@ describe('policy — course details are the catalogue (CR-3)', () => {
   });
 });
 
+describe('policy — deleting a course (CR-9)', () => {
+  const del = (courseId = 'c-math-1'): Action => ({ type: 'course.delete', courseId });
+
+  it('the COE and the administrator may delete a DRAFT course', () => {
+    expect(decide(coe, del(), C_MATH_1)).toEqual({ allow: true, via: 'COE' });
+    expect(decide(admin, del(), C_MATH_1)).toEqual({ allow: true, via: 'ADMIN' });
+    // Institution-wide, like the rest of the catalogue: any department.
+    expect(decide(coe, del('c-phys-1'), C_PHYS_1).allow).toBe(true);
+  });
+
+  it('nobody else may — not the course faculty, not even the HoD', () => {
+    for (const who of [facultyMath1, hodMath, dean, iqac, principal]) {
+      expect(decide(who, del(), C_MATH_1).allow, who.userId).toBe(false);
+    }
+  });
+
+  it('a LOCKED course cannot be deleted by anyone', () => {
+    const locked = course({ status: 'LOCKED' });
+    for (const who of [coe, admin]) {
+      expect(decide(who, del(), locked), who.userId).toEqual({ allow: false, reason: 'COURSE_LOCKED' });
+    }
+  });
+
+  it('a SUBMITTED course is in the HoD’s hands and cannot be deleted', () => {
+    const submitted = course({ status: 'SUBMITTED' });
+    for (const who of [coe, admin]) {
+      expect(decide(who, del(), submitted), who.userId).toEqual({ allow: false, reason: 'WRONG_STATUS' });
+    }
+  });
+
+  it('holding it opens no academic data to the administrator', () => {
+    // The deletion refuses while any recorded work exists, so this
+    // capability must not have widened the administrator's reach.
+    expect(decide(admin, courseAction('course.read', 'c-math-1'), C_MATH_1).allow).toBe(false);
+    expect(decide(admin, courseAction('marks.read', 'c-math-1'), C_MATH_1).allow).toBe(false);
+  });
+});
+
 describe('policy — slow and advanced learners (CR-8)', () => {
   const rate = (courseId: string): Action => ({ type: 'learners.rate', courseId });
   const roll = (programmeId: string): Action => ({ type: 'learners.read', programmeId });

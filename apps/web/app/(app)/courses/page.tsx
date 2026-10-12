@@ -1,4 +1,7 @@
 import Link from 'next/link';
+import { deleteCourseAction } from '@/actions/course';
+import { ConfirmRemove } from '@/components/ConfirmRemove';
+import { courseDeletionSummary } from '@/lib/catalogueRemoval';
 import { prisma } from '@/lib/db';
 import { requireSession } from '@/lib/session';
 
@@ -19,9 +22,14 @@ export default async function CoursesPage() {
   // end-semester examination of every theory course, so they see all of
   // them — the one role whose scope is the whole college here.
   const isCoe = user.roles.some((role) => role.kind === 'COE');
+  // CR-9: the administrator may delete a course too, so sees the
+  // catalogue — code, title, batch, staffing, status. Not the course
+  // itself: course.read stays denied, so the code is not a link for them.
+  const isAdmin = user.isAdmin;
+  const opensCourses = !isAdmin || isCoe;
 
   const courses = await prisma.course.findMany({
-    where: isCoe
+    where: isCoe || isAdmin
       ? undefined
       : {
           OR: [
@@ -41,6 +49,9 @@ export default async function CoursesPage() {
   });
 
   const canCreate = isCoe;
+  // Offers the button only; deleteCourseAction asks the Guard
+  // (`course.delete`, DRAFT only) and refuses while recorded work exists.
+  const offersDelete = (status: string) => (isCoe || isAdmin) && status === 'DRAFT';
 
   return (
     <div className="space-y-4">
@@ -72,15 +83,20 @@ export default async function CoursesPage() {
               <th className="border border-gray-300 px-2 py-1">COs</th>
               <th className="border border-gray-300 px-2 py-1">Assessments</th>
               <th className="border border-gray-300 px-2 py-1">Status</th>
+              {isCoe || isAdmin ? <th className="border border-gray-300 px-2 py-1 w-64" aria-label="Delete" /> : null}
             </tr>
           </thead>
           <tbody>
             {courses.map((course) => (
               <tr key={course.id} className="hover:bg-blue-50">
                 <td className="border border-gray-300 px-2 py-1">
-                  <Link href={`/courses/${course.id}`} className="text-blue-700 hover:underline font-medium">
-                    {course.code}
-                  </Link>
+                  {opensCourses ? (
+                    <Link href={`/courses/${course.id}`} className="text-blue-700 hover:underline font-medium">
+                      {course.code}
+                    </Link>
+                  ) : (
+                    <span className="font-medium">{course.code}</span>
+                  )}
                 </td>
                 <td className="border border-gray-300 px-2 py-1">{course.title}</td>
                 <td className="border border-gray-300 px-2 py-1">
@@ -98,6 +114,24 @@ export default async function CoursesPage() {
                     <span className="text-xs text-gray-500"> · v{course.snapshots[0].version}</span>
                   ) : null}
                 </td>
+                {isCoe || isAdmin ? (
+                  <td className="border border-gray-300 px-2 py-1">
+                    {offersDelete(course.status) ? (
+                      <ConfirmRemove
+                        action={deleteCourseAction.bind(null, course.id)}
+                        summary={courseDeletionSummary(course, {
+                          cos: course._count.cos,
+                          assessments: course._count.assessments,
+                          enrolments: course._count.enrolments,
+                          instructors: course.instructors.length,
+                        })}
+                        label="Delete"
+                        confirmLabel="Yes, delete course"
+                        pendingLabel="Deleting…"
+                      />
+                    ) : null}
+                  </td>
+                ) : null}
               </tr>
             ))}
           </tbody>

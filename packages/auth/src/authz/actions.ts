@@ -11,6 +11,7 @@ export type CourseActionType =
   | 'course.read' // setup + computed results + exports
   | 'course.write' // course setup: COs, assessments, indirect feedback
   | 'course.details.write' // CR-3: code, title, semester, credits, Laboratory flag — the COE alone
+  | 'course.delete' // CR-9: remove a catalogue entry that holds no recorded work — COE and administrator
   | 'course.staff' // who teaches the course (FR-4 staffing — HoD, never the faculty themselves)
   | 'matrix.write' // CO↔PO articulation matrix (§2: coordinator capability too)
   | 'marks.read' // per-student raw marks (NFR-10: faculty + department chain only)
@@ -82,6 +83,7 @@ export const COURSE_ACTION_TYPES: readonly CourseActionType[] = [
   'course.read',
   'course.write',
   'course.details.write',
+  'course.delete',
   'assessment.external.write',
   'marks.external.write',
   'course.staff',

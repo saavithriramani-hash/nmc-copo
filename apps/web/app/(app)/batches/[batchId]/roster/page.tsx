@@ -1,8 +1,11 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { removeRosterEntryAction } from '@/actions/roster';
+import { ConfirmRemove } from '@/components/ConfirmRemove';
 import { RosterImport } from '@/components/RosterImport';
 import { guard } from '@/lib/authz';
 import { prisma } from '@/lib/db';
+import { studentRemovalSummary } from '@/lib/catalogueRemoval';
 import { requireSession } from '@/lib/session';
 
 export default async function BatchRosterPage({ params }: { params: Promise<{ batchId: string }> }) {
@@ -47,6 +50,7 @@ export default async function BatchRosterPage({ params }: { params: Promise<{ ba
                 <th className="border border-gray-300 px-2 py-1">Name</th>
                 <th className="border border-gray-300 px-2 py-1">Email</th>
                 <th className="border border-gray-300 px-2 py-1 w-32">Courses enrolled</th>
+                {canManage ? <th className="border border-gray-300 px-2 py-1 w-64" aria-label="Remove" /> : null}
               </tr>
             </thead>
             <tbody>
@@ -56,6 +60,21 @@ export default async function BatchRosterPage({ params }: { params: Promise<{ ba
                   <td className="border border-gray-300 px-2 py-1">{entry.student.fullName}</td>
                   <td className="border border-gray-300 px-2 py-1 text-gray-600">{entry.student.email ?? '—'}</td>
                   <td className="border border-gray-300 px-2 py-1 text-center">{entry._count.enrolments}</td>
+                  {canManage ? (
+                    <td className="border border-gray-300 px-2 py-1">
+                      {/* CR-9: refused server-side while they hold marks anywhere. */}
+                      <ConfirmRemove
+                        action={removeRosterEntryAction.bind(null, batchId, entry.id)}
+                        summary={studentRemovalSummary(
+                          { registerNumber: entry.registerNumber, fullName: entry.student.fullName },
+                          entry._count.enrolments,
+                        )}
+                        label="Remove"
+                        confirmLabel="Yes, remove student"
+                        pendingLabel="Removing…"
+                      />
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>
