@@ -1,6 +1,7 @@
 import { addInstructorAction, deleteCourseAction, removeInstructorAction } from '@/actions/course';
 import { AddInstructorForm } from '@/components/AddInstructorForm';
 import { ConfirmRemove } from '@/components/ConfirmRemove';
+import { OfferToBatchForm } from '@/components/OfferToBatchForm';
 import { CourseDetailsForm } from '@/components/CourseDetailsForm';
 import { guard } from '@/lib/authz';
 import { prisma } from '@/lib/db';
@@ -23,6 +24,7 @@ export default async function CourseDetailsPage({
     where: { id: courseId },
     include: {
       instructors: { include: { user: { select: { id: true, fullName: true, email: true } } } },
+      batch: { select: { programmeId: true, programme: { select: { departmentId: true } } } },
       _count: { select: { cos: true, assessments: true, enrolments: true } },
     },
   });
@@ -34,6 +36,20 @@ export default async function CourseDetailsPage({
   const canStaff = (await guard.check(user.userId, { type: 'course.staff', courseId })).allow;
   // CR-9: removing the catalogue entry — the COE (or administrator), DRAFT only.
   const canDelete = (await guard.check(user.userId, { type: 'course.delete', courseId })).allow;
+  // CR-10: offering the paper to the next intake creates a course there —
+  // the same authority as creating one by hand. Same programme only.
+  const canOffer = (
+    await guard.check(user.userId, { type: 'course.create', departmentId: course.batch.programme.departmentId })
+  ).allow;
+  const offerBatches = canOffer
+    ? (
+        await prisma.batch.findMany({
+          where: { programmeId: course.batch.programmeId, id: { not: course.batchId } },
+          select: { id: true, name: true, courses: { where: { code: course.code }, select: { id: true } } },
+          orderBy: { startYear: 'asc' },
+        })
+      ).map((batch) => ({ id: batch.id, name: batch.name, hasCode: batch.courses.length > 0 }))
+    : [];
 
   const addAction = addInstructorAction.bind(null, courseId);
 
@@ -108,6 +124,18 @@ export default async function CourseDetailsPage({
           </p>
         )}
       </section>
+
+      {canOffer ? (
+        <section className="space-y-2">
+          <h2 className="font-medium">Offer to another batch</h2>
+          <p className="text-xs text-gray-500">
+            Creates this course for another batch of the same programme — the next year&apos;s intake — as a separate
+            DRAFT course with the same details, COs, assessments and articulation matrix. Marks, students, faculty and
+            parameter overrides are not carried over (CR-10).
+          </p>
+          <OfferToBatchForm courseId={courseId} code={course.code} batches={offerBatches} />
+        </section>
+      ) : null}
 
       {canDelete ? (
         <section className="space-y-2">

@@ -9,6 +9,7 @@ import { guard } from '@/lib/authz';
 import { logAudit } from '@/lib/audit';
 import { requireSession } from '@/lib/session';
 import { courseBlockMessage, courseLabel } from '@/lib/catalogueRemoval';
+import { offerTargetProblem, planCourseCopy } from '@/lib/courseOffer';
 
 export async function createCourseAction(formData: FormData): Promise<void> {
   const user = await requireSession();
@@ -286,4 +287,195 @@ export async function removeInstructorAction(courseId: string, userId: string): 
     before: { userId },
   });
   revalidatePath(`/courses/${courseId}`);
+}
+
+/**
+ * CR-10: offer this course to another batch of its programme — the next
+ * year's intake. Creates a NEW course instance there, DRAFT and unstaffed,
+ * with the catalogue entry and the set-up copied (courseOffer.ts says
+ * exactly what is and is not), in one transaction. The source is only
+ * read, whatever its status.
+ *
+ * Authority is `course.create` on the target batch's department — the
+ * same as creating the course by hand, which is all this saves.
+ */
+export type OfferCourseResult = { ok?: true; error?: string; newCourseId?: string };
+
+export async function offerCourseToBatchAction(
+  sourceCourseId: string,
+  _prev: OfferCourseResult | null,
+  formData: FormData,
+): Promise<OfferCourseResult> {
+  const user = await requireSession();
+  await guard.require(user.userId, { type: 'course.read', courseId: sourceCourseId });
+
+  const targetBatchId = String(formData.get('batchId') ?? '');
+  const target = targetBatchId
+    ? await prisma.batch.findUnique({
+        where: { id: targetBatchId },
+        select: { id: true, name: true, programmeId: true, programme: { select: { departmentId: true } } },
+      })
+    : null;
+  // Asked before the rules below, so a batch the caller may not create
+  // courses in is denied identically whether or not it would qualify.
+  if (target) {
+    await guard.require(user.userId, { type: 'course.create', departmentId: target.programme.departmentId });
+  }
+
+  const source = await prisma.course.findUniqueOrThrow({
+    where: { id: sourceCourseId },
+    select: {
+      code: true,
+      title: true,
+      semester: true,
+      credits: true,
+      isLaboratory: true,
+      batchId: true,
+      batch: { select: { programmeId: true } },
+      cos: {
+        select: {
+          id: true,
+          code: true,
+          statement: true,
+          bloomLevels: true,
+          displayOrder: true,
+          matrixEntries: { select: { poId: true, strength: true } },
+        },
+      },
+      assessments: {
+        select: {
+          name: true,
+          shape: true,
+          scoringRule: true,
+          weightGroup: true,
+          displayOrder: true,
+          sections: { select: { id: true, name: true, displayOrder: true, optionalAnswerCount: true } },
+          items: {
+            select: { label: true, maxMark: true, coId: true, sectionId: true, bloomLevel: true, displayOrder: true },
+          },
+          coTags: { select: { coId: true } },
+        },
+      },
+    },
+  });
+
+  const codeTaken = target
+    ? (await prisma.course.count({ where: { batchId: target.id, code: source.code } })) > 0
+    : false;
+  const problem = offerTargetProblem({
+    source: { code: source.code, batchId: source.batchId, programmeId: source.batch.programmeId },
+    target,
+    codeTaken,
+  });
+  if (problem || !target) return { error: problem ?? 'Choose a batch.' };
+
+  const plan = planCourseCopy({
+    cos: source.cos.map((co) => ({ ...co, matrix: co.matrixEntries })),
+    assessments: source.assessments.map((a) => ({
+      ...a,
+      items: a.items.map((item) => ({ ...item, maxMark: item.maxMark.toString() })),
+    })),
+  });
+
+  let newCourseId: string;
+  try {
+    newCourseId = await prisma.$transaction(async (tx) => {
+      const course = await tx.course.create({
+        data: {
+          batchId: target.id,
+          code: source.code,
+          title: source.title,
+          semester: source.semester,
+          credits: source.credits,
+          isLaboratory: source.isLaboratory,
+        },
+      });
+
+      const coIds: string[] = [];
+      for (const co of plan.cos) {
+        const created = await tx.courseOutcome.create({
+          data: {
+            courseId: course.id,
+            code: co.code,
+            statement: co.statement,
+            bloomLevels: co.bloomLevels,
+            displayOrder: co.displayOrder,
+          },
+        });
+        coIds.push(created.id);
+      }
+      const cells = plan.cos.flatMap((co, index) =>
+        co.matrix.map((cell) => ({ coId: coIds[index]!, poId: cell.poId, strength: cell.strength })),
+      );
+      if (cells.length > 0) await tx.articulationMatrix.createMany({ data: cells });
+
+      for (const assessment of plan.assessments) {
+        const created = await tx.assessment.create({
+          data: {
+            courseId: course.id,
+            name: assessment.name,
+            shape: assessment.shape,
+            scoringRule: assessment.scoringRule,
+            weightGroup: assessment.weightGroup,
+            displayOrder: assessment.displayOrder,
+          },
+        });
+        const sectionIds: string[] = [];
+        for (const section of assessment.sections) {
+          const createdSection = await tx.section.create({
+            data: {
+              assessmentId: created.id,
+              name: section.name,
+              displayOrder: section.displayOrder,
+              optionalAnswerCount: section.optionalAnswerCount,
+            },
+          });
+          sectionIds.push(createdSection.id);
+        }
+        if (assessment.items.length > 0) {
+          await tx.item.createMany({
+            data: assessment.items.map((item) => ({
+              assessmentId: created.id,
+              sectionId: item.sectionIndex === null ? null : sectionIds[item.sectionIndex]!,
+              label: item.label,
+              maxMark: new Prisma.Decimal(item.maxMark),
+              coId: item.coIndex === null ? null : coIds[item.coIndex]!,
+              bloomLevel: item.bloomLevel,
+              displayOrder: item.displayOrder,
+            })),
+          });
+        }
+        if (assessment.coTagIndexes.length > 0) {
+          await tx.assessmentCoTag.createMany({
+            data: assessment.coTagIndexes.map((index) => ({ assessmentId: created.id, coId: coIds[index]! })),
+          });
+        }
+      }
+      return course.id;
+    });
+  } catch (err) {
+    // Another offer of the same code to the same batch won the race.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      return { error: `${target.name} already has a course ${source.code}. Open that one instead.` };
+    }
+    throw err;
+  }
+
+  await logAudit({
+    actorId: user.userId,
+    action: 'COURSE_OFFERED_TO_BATCH',
+    entityType: 'Course',
+    entityId: newCourseId,
+    after: {
+      sourceCourseId,
+      batchId: target.id,
+      code: source.code,
+      title: source.title,
+      cos: plan.cos.length,
+      assessments: plan.assessments.length,
+      matrixCells: plan.cos.reduce((sum, co) => sum + co.matrix.length, 0),
+    },
+  });
+  revalidatePath('/courses');
+  return { ok: true, newCourseId };
 }
