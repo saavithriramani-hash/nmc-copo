@@ -14,9 +14,13 @@ export interface CourseReadiness {
   title: string;
   status: 'DRAFT' | 'SUBMITTED' | 'LOCKED';
   isLaboratory: boolean;
+  semester: number;
+  programmeId: string;
   programmeName: string;
   departmentName: string;
+  batchId: string;
   batchName: string;
+  batchStartYear: number;
   instructors: string[];
   cos: number;
   assessments: number;

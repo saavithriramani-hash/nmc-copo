@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { CourseGroups } from './CourseGroups';
 import type { ReviewRound } from '@/lib/dashboard';
 import type { CourseReadiness } from '@/lib/dashboardReadiness';
 import { markCompletion, nextStep } from '@/lib/dashboardReadiness';
@@ -77,16 +78,29 @@ export function ReturnedCourse({ round }: { round: ReviewRound }) {
   );
 }
 
-/** A table of courses with the one thing each still needs. */
+/**
+ * Courses with the one thing each still needs, grouped by programme and
+ * then batch. The headings carry the programme, batch and (for
+ * college-wide lists) department, so the rows do not repeat them.
+ */
 export function ReadinessTable({ courses, showDepartment = false }: { courses: CourseReadiness[]; showDepartment?: boolean }) {
+  return (
+    <CourseGroups
+      courses={courses}
+      showDepartment={showDepartment}
+      renderTable={(batchCourses) => <ReadinessRows courses={batchCourses} />}
+    />
+  );
+}
+
+function ReadinessRows({ courses }: { courses: CourseReadiness[] }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full bg-white border-collapse text-sm">
         <thead>
           <tr className="bg-gray-100 text-left">
             <th className="border border-gray-300 px-2 py-1">Course</th>
-            {showDepartment ? <th className="border border-gray-300 px-2 py-1">Department</th> : null}
-            <th className="border border-gray-300 px-2 py-1">Programme · Batch</th>
+            <th className="border border-gray-300 px-2 py-1 w-14">Sem</th>
             <th className="border border-gray-300 px-2 py-1 w-24">Status</th>
             <th className="border border-gray-300 px-2 py-1 w-28">Marks</th>
             <th className="border border-gray-300 px-2 py-1">Next step</th>
@@ -105,10 +119,7 @@ export function ReadinessTable({ courses, showDepartment = false }: { courses: C
                   <span className="text-gray-600"> {course.title}</span>
                   {course.isLaboratory ? <span className="text-xs text-gray-500"> · lab</span> : null}
                 </td>
-                {showDepartment ? <td className="border border-gray-300 px-2 py-1">{course.departmentName}</td> : null}
-                <td className="border border-gray-300 px-2 py-1 text-xs">
-                  {course.programmeName} · {course.batchName}
-                </td>
+                <td className="border border-gray-300 px-2 py-1 text-center">{course.semester}</td>
                 <td className="border border-gray-300 px-2 py-1">
                   {course.status}
                   {course.lockedVersion ? <span className="text-xs text-gray-500"> v{course.lockedVersion}</span> : null}

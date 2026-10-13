@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { deleteCourseAction } from '@/actions/course';
 import { ConfirmRemove } from '@/components/ConfirmRemove';
+import { CourseGroups } from '@/components/CourseGroups';
 import { courseDeletionSummary } from '@/lib/catalogueRemoval';
 import { prisma } from '@/lib/db';
 import { requireSession } from '@/lib/session';
@@ -53,6 +54,17 @@ export default async function CoursesPage() {
   // (`course.delete`, DRAFT only) and refuses while recorded work exists.
   const offersDelete = (status: string) => (isCoe || isAdmin) && status === 'DRAFT';
 
+  // Grouped by programme, then batch (newest first); the headings carry
+  // both, so the rows do not repeat them.
+  const grouped = courses.map((course) => ({
+    ...course,
+    programmeId: course.batch.programmeId,
+    programmeName: course.batch.programme.name,
+    departmentName: course.batch.programme.department.name,
+    batchName: course.batch.name,
+    batchStartYear: course.batch.startYear,
+  }));
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -72,70 +84,74 @@ export default async function CoursesPage() {
             : 'Courses appear here once the Controller of Examinations creates one and your HoD assigns you to it.'}
         </p>
       ) : (
-        <table className="w-full bg-white border-collapse">
-          <thead>
-            <tr className="bg-gray-100 text-left">
-              <th className="border border-gray-300 px-2 py-1">Code</th>
-              <th className="border border-gray-300 px-2 py-1">Title</th>
-              <th className="border border-gray-300 px-2 py-1">Programme / Batch</th>
-              <th className="border border-gray-300 px-2 py-1">Sem</th>
-              <th className="border border-gray-300 px-2 py-1">Faculty</th>
-              <th className="border border-gray-300 px-2 py-1">COs</th>
-              <th className="border border-gray-300 px-2 py-1">Assessments</th>
-              <th className="border border-gray-300 px-2 py-1">Status</th>
-              {isCoe || isAdmin ? <th className="border border-gray-300 px-2 py-1 w-64" aria-label="Delete" /> : null}
-            </tr>
-          </thead>
-          <tbody>
-            {courses.map((course) => (
-              <tr key={course.id} className="hover:bg-blue-50">
-                <td className="border border-gray-300 px-2 py-1">
-                  {opensCourses ? (
-                    <Link href={`/courses/${course.id}`} className="text-blue-700 hover:underline font-medium">
-                      {course.code}
-                    </Link>
-                  ) : (
-                    <span className="font-medium">{course.code}</span>
-                  )}
-                </td>
-                <td className="border border-gray-300 px-2 py-1">{course.title}</td>
-                <td className="border border-gray-300 px-2 py-1">
-                  {course.batch.programme.name} · {course.batch.name}
-                </td>
-                <td className="border border-gray-300 px-2 py-1">{course.semester}</td>
-                <td className="border border-gray-300 px-2 py-1">
-                  {course.instructors.map((i) => i.user.fullName).join(', ') || '—'}
-                </td>
-                <td className="border border-gray-300 px-2 py-1 text-center">{course._count.cos}</td>
-                <td className="border border-gray-300 px-2 py-1 text-center">{course._count.assessments}</td>
-                <td className="border border-gray-300 px-2 py-1 whitespace-nowrap">
-                  {course.status}
-                  {course.snapshots[0] ? (
-                    <span className="text-xs text-gray-500"> · v{course.snapshots[0].version}</span>
-                  ) : null}
-                </td>
-                {isCoe || isAdmin ? (
-                  <td className="border border-gray-300 px-2 py-1">
-                    {offersDelete(course.status) ? (
-                      <ConfirmRemove
-                        action={deleteCourseAction.bind(null, course.id)}
-                        summary={courseDeletionSummary(course, {
-                          cos: course._count.cos,
-                          assessments: course._count.assessments,
-                          enrolments: course._count.enrolments,
-                          instructors: course.instructors.length,
-                        })}
-                        label="Delete"
-                        confirmLabel="Yes, delete course"
-                        pendingLabel="Deleting…"
-                      />
+        <CourseGroups
+          courses={grouped}
+          // College-wide for the COE and the administrator, so each
+          // programme heading names its department.
+          showDepartment={isCoe || isAdmin}
+          renderTable={(batchCourses) => (
+            <table className="w-full bg-white border-collapse">
+              <thead>
+                <tr className="bg-gray-100 text-left">
+                  <th className="border border-gray-300 px-2 py-1">Code</th>
+                  <th className="border border-gray-300 px-2 py-1">Title</th>
+                  <th className="border border-gray-300 px-2 py-1">Sem</th>
+                  <th className="border border-gray-300 px-2 py-1">Faculty</th>
+                  <th className="border border-gray-300 px-2 py-1">COs</th>
+                  <th className="border border-gray-300 px-2 py-1">Assessments</th>
+                  <th className="border border-gray-300 px-2 py-1">Status</th>
+                  {isCoe || isAdmin ? <th className="border border-gray-300 px-2 py-1 w-64" aria-label="Delete" /> : null}
+                </tr>
+              </thead>
+              <tbody>
+                {batchCourses.map((course) => (
+                  <tr key={course.id} className="hover:bg-blue-50">
+                    <td className="border border-gray-300 px-2 py-1">
+                      {opensCourses ? (
+                        <Link href={`/courses/${course.id}`} className="text-blue-700 hover:underline font-medium">
+                          {course.code}
+                        </Link>
+                      ) : (
+                        <span className="font-medium">{course.code}</span>
+                      )}
+                    </td>
+                    <td className="border border-gray-300 px-2 py-1">{course.title}</td>
+                    <td className="border border-gray-300 px-2 py-1">{course.semester}</td>
+                    <td className="border border-gray-300 px-2 py-1">
+                      {course.instructors.map((i) => i.user.fullName).join(', ') || '—'}
+                    </td>
+                    <td className="border border-gray-300 px-2 py-1 text-center">{course._count.cos}</td>
+                    <td className="border border-gray-300 px-2 py-1 text-center">{course._count.assessments}</td>
+                    <td className="border border-gray-300 px-2 py-1 whitespace-nowrap">
+                      {course.status}
+                      {course.snapshots[0] ? (
+                        <span className="text-xs text-gray-500"> · v{course.snapshots[0].version}</span>
+                      ) : null}
+                    </td>
+                    {isCoe || isAdmin ? (
+                      <td className="border border-gray-300 px-2 py-1">
+                        {offersDelete(course.status) ? (
+                          <ConfirmRemove
+                            action={deleteCourseAction.bind(null, course.id)}
+                            summary={courseDeletionSummary(course, {
+                              cos: course._count.cos,
+                              assessments: course._count.assessments,
+                              enrolments: course._count.enrolments,
+                              instructors: course.instructors.length,
+                            })}
+                            label="Delete"
+                            confirmLabel="Yes, delete course"
+                            pendingLabel="Deleting…"
+                          />
+                        ) : null}
+                      </td>
                     ) : null}
-                  </td>
-                ) : null}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        />
       )}
     </div>
   );
