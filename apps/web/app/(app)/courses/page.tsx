@@ -70,9 +70,14 @@ export default async function CoursesPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Courses</h1>
         {canCreate ? (
-          <Link href="/courses/new" className="bg-blue-700 text-white rounded px-3 py-1.5 hover:bg-blue-800">
-            New course
-          </Link>
+          <div className="flex gap-2">
+            <Link href="/courses/import" className="border border-gray-300 rounded px-3 py-1.5 hover:bg-gray-100">
+              Import courses
+            </Link>
+            <Link href="/courses/new" className="bg-blue-700 text-white rounded px-3 py-1.5 hover:bg-blue-800">
+              New course
+            </Link>
+          </div>
         ) : null}
       </div>
 
