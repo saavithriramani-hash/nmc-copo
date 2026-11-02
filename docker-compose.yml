@@ -111,7 +111,32 @@ services:
       # Read-only: the app reports on backups, it never writes them.
       - ${BACKUP_DIR:-./backups}:/backups:ro
     ports:
-      - '${APP_PORT:-3000}:3000'
+      # APP_BIND decides who can reach this port directly.
+      #
+      #   0.0.0.0     the whole internet, which is right only when there
+      #               is no proxy and the server is on a campus network
+      #   127.0.0.1   the server itself only — the correct value BEHIND
+      #               TRAEFIK, which reaches the container over Docker's
+      #               own network and never through the published port
+      #
+      # Left open behind a proxy, http://<ip>:3000 keeps serving the
+      # application unencrypted beside the HTTPS one, and every password
+      # typed into it crosses the network in clear.
+      - '${APP_BIND:-0.0.0.0}:${APP_PORT:-3000}:3000'
+    labels:
+      # Traefik reads these off the container. They do nothing at all
+      # unless TRAEFIK_ENABLE is true, because the proxy runs with
+      # exposedbydefault=false — so a deployment with no proxy carries
+      # them harmlessly.
+      traefik.enable: '${TRAEFIK_ENABLE:-false}'
+      # Both names, because the www CNAME exists and would otherwise meet
+      # a 404. The certificate covers whichever of them resolve.
+      traefik.http.routers.copo.rule: 'Host(`${COPO_DOMAIN:-localhost}`) || Host(`www.${COPO_DOMAIN:-localhost}`)'
+      traefik.http.routers.copo.entrypoints: 'websecure'
+      traefik.http.routers.copo.tls.certresolver: 'le'
+      # Stated explicitly: the container exposes one port, but Traefik
+      # guessing is a failure that only shows up at runtime.
+      traefik.http.services.copo.loadbalancer.server.port: '3000'
 
   backup:
     # Postgres 16 — the same major version as db, so pg_dump always
@@ -157,6 +182,53 @@ services:
       # where scheduled maintenance lives; the app itself runs no timers.
       - app_storage:/app/storage
 
+  # ── HTTPS ────────────────────────────────────────────────────────
+  # Only started when the `tls` profile is active:
+  #
+  #   COMPOSE_PROFILES=tls
+  #
+  # A campus server on plain HTTP leaves it out and nothing changes. A
+  # server on the public internet must not: without TLS the session
+  # cookie and every password typed into the login page cross the network
+  # in clear.
+  traefik:
+    image: traefik:v3.7
+    container_name: copo-traefik
+    profiles: ['tls']
+    restart: unless-stopped
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      # Read-only. Traefik needs the socket to see which containers exist;
+      # it never needs to change them, and a writable socket is root on
+      # the host for anything that reaches it.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # A named volume, deliberately, not a bind mount: Traefik refuses an
+      # acme.json that is group- or world-readable, and a bind-mounted
+      # file created by the host arrives with the wrong mode. In a volume
+      # Traefik creates it itself, correctly.
+      - letsencrypt:/letsencrypt
+    command:
+      - '--entrypoints.web.address=:80'
+      - '--entrypoints.websecure.address=:443'
+      # Everything on :80 is sent to :443 permanently. The application is
+      # never served unencrypted, not even for a redirect hop.
+      - '--entrypoints.web.http.redirections.entrypoint.to=websecure'
+      - '--entrypoints.web.http.redirections.entrypoint.scheme=https'
+      - '--entrypoints.web.http.redirections.entrypoint.permanent=true'
+      - '--providers.docker=true'
+      # Nothing is routed unless it asks to be, by label.
+      - '--providers.docker.exposedbydefault=false'
+      - '--certificatesresolvers.le.acme.email=${ACME_EMAIL:?ACME_EMAIL must be set to get a certificate}'
+      - '--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json'
+      - '--certificatesresolvers.le.acme.httpchallenge=true'
+      - '--certificatesresolvers.le.acme.httpchallenge.entrypoint=web'
+
 volumes:
   db_data:
   app_storage:
+  letsencrypt:

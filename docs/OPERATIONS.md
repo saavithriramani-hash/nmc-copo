@@ -190,6 +190,81 @@ first passer-by an administrator account.
 
 ---
 
+### HTTPS, with a certificate that renews itself
+
+Until this is done, **every password typed into the login page crosses the
+network in clear**, and so does the session cookie that follows it. On a
+campus network that is a stopgap. On a public address it is not
+defensible.
+
+The stack carries a fourth container for this. It is not started unless
+you ask for it, so a campus server on plain HTTP is unaffected.
+
+**Before you start**, two things must already be true, and both are
+easier to check than to debug afterwards:
+
+1. The domain's **A record points at this server**. The certificate is
+   issued by Let's Encrypt fetching a file from the domain over HTTP, so
+   a domain pointing anywhere else fails — and repeated failures are
+   rate-limited for the rest of the week. Check with:
+   ```
+   nslookup yourdomain
+   ```
+2. **Ports 80 and 443 are free.** Anything else holding them — including
+   another copy of Traefik — prevents the certificate being issued.
+   ```
+   sudo ss -lntp | grep -E ':80 |:443 '
+   ```
+
+Then set these, and **remove the `COPO_COOKIE_SECURE` line**:
+
+```
+COMPOSE_PROFILES=tls
+TRAEFIK_ENABLE=true
+COPO_DOMAIN=yourdomain
+ACME_EMAIL=someone@the.college
+APP_BIND=127.0.0.1
+```
+
+`APP_BIND` closes the application's own port to everyone but this server.
+Leave it open and the application keeps being served unencrypted on port
+3000 beside the HTTPS one, which defeats the exercise.
+
+Removing `COPO_COOKIE_SECURE` is not an oversight: a production build
+marks the session cookie `Secure` by default, which is what you want once
+there is a certificate. Setting it `false` behind TLS is a downgrade.
+
+Then:
+
+```
+docker compose up -d
+```
+
+The certificate arrives within a minute of the first request. Watch it:
+
+```
+docker compose logs -f traefik
+```
+
+Afterwards `http://yourdomain` permanently redirects to `https://`, and
+the certificate renews itself about thirty days before expiry with no
+action from anyone. The renewal needs port 80 to keep working, so do not
+close it.
+
+#### If the certificate does not arrive
+
+The log names the reason. The three common ones:
+
+- **"timeout during connect"** — the domain does not resolve to this
+  server, or a firewall is blocking port 80.
+- **"too many certificates already issued"** — the rate limit, from
+  repeated failed attempts. It clears after a week; fix the cause before
+  trying again.
+- **404 on every request** — `COPO_DOMAIN` does not match the name being
+  typed, so no router matches it.
+
+---
+
 ### Before a busy marking window: the connection pool
 
 `DB_CONNECTION_LIMIT` in `.env` is how many database connections the

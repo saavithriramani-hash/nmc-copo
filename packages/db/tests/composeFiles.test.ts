@@ -34,32 +34,60 @@ const significantLines = (text: string): string[] =>
     .filter((line) => line.trim() !== '' && !line.trim().startsWith('#'));
 
 describe('docker-compose.yml — the deployed stack, pulled rather than built', () => {
-  it('differs from the source-built file ONLY in how the two images arrive', () => {
-    const a = significantLines(servicesOf(dev));
-    const b = significantLines(servicesOf(prod));
+  it('gives the three shared services the SAME settings in both files', () => {
+    // The real drift risk, now that the deployed file also carries a
+    // proxy: a setting added to one stack and forgotten in the other, so
+    // the college server quietly runs something nobody described.
+    // Compared by environment KEY rather than by line, because the two
+    // legitimately differ in how the images arrive and in who may reach
+    // the published port.
+    const envKeys = (text: string, service: string): string[] => {
+      const all = servicesOf(text).split('\n');
+      const head = all.findIndex((l) => l.trim() === `${service}:`);
+      if (head < 0) return [`NO SERVICE ${service}`];
+      let inEnv = false;
+      const keys: string[] = [];
+      for (const line of all.slice(head + 1)) {
+        if (/^  [a-z]/.test(line)) break;            // the next service
+        if (/^    environment:/.test(line)) { inEnv = true; continue; }
+        if (inEnv && /^    [a-z_]+:/.test(line)) break;  // the next block
+        const m = inEnv ? /^      ([A-Z_]+):/.exec(line) : null;
+        if (m) keys.push(m[1]!);
+      }
+      return keys.sort();
+    };
+    for (const service of ['db', 'app', 'backup']) {
+      expect(envKeys(prod, service), service).toEqual(envKeys(dev, service));
+    }
+  });
 
-    const onlyInDev = a.filter((line) => !b.includes(line));
-    const onlyInProd = b.filter((line) => !a.includes(line));
+  it('carries the proxy ONLY in the deployed file, and only behind a profile', () => {
+    // A campus server on plain HTTP must not suddenly start asking Let's
+    // Encrypt for a certificate it cannot obtain.
+    expect(dev).not.toContain('traefik');
+    expect(prod).toContain('image: traefik:');
+    expect(prod).toMatch(/profiles:\s*\['tls'\]/);
+  });
 
-    // Dev builds the application and bind-mounts ops/ into a stock
-    // postgres image. Prod pulls both, so ops/ travels inside the backup
-    // image and neither the build context nor the mount is needed.
-    expect(onlyInDev.map((l) => l.trim()).sort()).toEqual(
-      [
-        'build:',
-        'context: .',
-        'dockerfile: Dockerfile',
-        'image: copo-app:${APP_VERSION:-latest}',
-        '- ./ops:/ops:ro',
-        "entrypoint: ['/bin/bash', '/ops/backup-loop.sh']",
-      ].sort(),
-    );
-    expect(onlyInProd.map((l) => l.trim()).sort()).toEqual(
-      [
-        'image: ${COPO_IMAGE:-ghcr.io/saavithriramani-hash/nmc-copo}:${APP_VERSION:-latest}',
-        'image: ${COPO_BACKUP_IMAGE:-ghcr.io/saavithriramani-hash/nmc-copo-backup}:${APP_VERSION:-latest}',
-      ].sort(),
-    );
+  it('serves the application over TLS and never beside it in the clear', () => {
+    expect(prod).toContain('--entrypoints.web.http.redirections.entrypoint.to=websecure');
+    expect(prod).toContain('permanent=true');
+    // Routers opt in; nothing is exposed because it merely exists.
+    expect(prod).toContain('--providers.docker.exposedbydefault=false');
+    // The application's own port can be closed to everyone but this host.
+    expect(prod).toContain('${APP_BIND:-0.0.0.0}');
+  });
+
+  it('does not hand the proxy more of the host than it needs', () => {
+    // A writable docker socket is root on the host for whatever reaches
+    // it; Traefik only ever needs to read which containers exist.
+    expect(prod).toContain('/var/run/docker.sock:/var/run/docker.sock:ro');
+    expect(prod).toContain('no-new-privileges:true');
+    // acme.json in a named volume, not a bind mount: Traefik refuses a
+    // certificate store that is group- or world-readable, and a
+    // host-created file arrives with the wrong mode.
+    expect(prod).toContain('letsencrypt:/letsencrypt');
+    expect(prod).not.toMatch(/\.\/letsencrypt:/);
   });
 
   it('needs NOTHING from the repository on the server', () => {
