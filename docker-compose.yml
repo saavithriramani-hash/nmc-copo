@@ -183,18 +183,23 @@ services:
       - app_storage:/app/storage
 
   # ── HTTPS ────────────────────────────────────────────────────────
-  # Only started when the `tls` profile is active:
+  # Part of the stack, unconditionally.
   #
-  #   COMPOSE_PROFILES=tls
+  # This was behind a compose profile, which was a mistake: COMPOSE_PROFILES
+  # is read by the docker compose COMMAND, not substituted into this file
+  # like every other setting here, so a hosting panel that supplies
+  # variables to the stack interpolates POSTGRES_PASSWORD correctly and
+  # ignores the profile entirely. The proxy then never starts, the
+  # application is served over plain HTTP, and nothing anywhere says so.
+  # A security control that depends on a mechanism the deployment may not
+  # have is not a control.
   #
-  # A campus server on plain HTTP leaves it out and nothing changes. A
-  # server on the public internet must not: without TLS the session
-  # cookie and every password typed into the login page cross the network
-  # in clear.
+  # So: deploying this file means serving over HTTPS. A server that must
+  # run on plain HTTP — a campus machine with no public name — builds from
+  # docker-compose.dev.yml instead, which has no proxy.
   traefik:
     image: traefik:v3.7
     container_name: copo-traefik
-    profiles: ['tls']
     restart: unless-stopped
     logging: *default-logging
     security_opt:

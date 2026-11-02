@@ -61,12 +61,22 @@ describe('docker-compose.yml — the deployed stack, pulled rather than built', 
     }
   });
 
-  it('carries the proxy ONLY in the deployed file, and only behind a profile', () => {
-    // A campus server on plain HTTP must not suddenly start asking Let's
-    // Encrypt for a certificate it cannot obtain.
+  it('carries the proxy in the deployed file and not in the built one', () => {
     expect(dev).not.toContain('traefik');
     expect(prod).toContain('image: traefik:');
-    expect(prod).toMatch(/profiles:\s*\['tls'\]/);
+  });
+
+  it('does NOT put the proxy behind a compose profile', () => {
+    // It was, and that was a mistake worth a regression test. Profiles
+    // are chosen by the docker compose COMMAND through COMPOSE_PROFILES;
+    // they are not substituted into this file like every other setting.
+    // A hosting panel that supplies the stack's variables interpolated
+    // POSTGRES_PASSWORD correctly and ignored the profile, so the proxy
+    // never started and the application was served over plain HTTP with
+    // nothing anywhere reporting it. Deploying this file must mean
+    // serving over HTTPS, with no second mechanism required to make it
+    // true.
+    expect(prod).not.toContain('profiles:');
   });
 
   it('serves the application over TLS and never beside it in the clear', () => {

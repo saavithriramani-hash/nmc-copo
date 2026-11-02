@@ -197,8 +197,10 @@ network in clear**, and so does the session cookie that follows it. On a
 campus network that is a stopgap. On a public address it is not
 defensible.
 
-The stack carries a fourth container for this. It is not started unless
-you ask for it, so a campus server on plain HTTP is unaffected.
+The stack carries a fourth container for this, and it is always part of
+it: deploying `docker-compose.yml` means serving over HTTPS. A server
+that must run on plain HTTP builds from `docker-compose.dev.yml`, which
+has no proxy.
 
 **Before you start**, two things must already be true, and both are
 easier to check than to debug afterwards:
@@ -219,7 +221,6 @@ easier to check than to debug afterwards:
 Then set these, and **remove the `COPO_COOKIE_SECURE` line**:
 
 ```
-COMPOSE_PROFILES=tls
 TRAEFIK_ENABLE=true
 COPO_DOMAIN=yourdomain
 ACME_EMAIL=someone@the.college
